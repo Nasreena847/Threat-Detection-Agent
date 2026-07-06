@@ -1,0 +1,7 @@
+fastapi
+pydantic
+python-dotenv
+validators
+tldextract
+httpx
+uvicorn

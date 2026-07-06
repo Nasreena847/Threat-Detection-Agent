@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "TrustTab",
+  "description": "AI-powered website security assistant for the current tab.",
+  "version": "1.0.0",
+  "action": {
+    "default_title": "TrustTab",
+    "default_popup": "index.html"
+  },
+  "permissions": ["activeTab", "tabs", "storage", "scripting"],
+  "host_permissions": ["<all_urls>"],
+  "background": {
+    "service_worker": "assets/background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["assets/content.js"]
+    }
+  ]
+}
