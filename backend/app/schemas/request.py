@@ -14,7 +14,7 @@ class AuditRequest(BaseModel):
 
 
 class CrooInvokeRequest(BaseModel):
-    """Request body for the mocked CROO agent invocation endpoint."""
+    """Request body for the CROO agent invocation endpoint."""
 
     agent_id: str = Field(..., min_length=1)
     payload: dict[str, object] = Field(default_factory=dict)

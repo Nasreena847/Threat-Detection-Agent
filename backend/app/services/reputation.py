@@ -40,25 +40,25 @@ class ReputationService:
         normalized_url = url.lower()
 
         score = 8
-        reasons: list[str] = ["Mock reputation check completed."]
+        reasons: list[str] = ["Deterministic reputation check completed."]
 
         if registered_domain in KNOWN_TRUSTED_DOMAINS:
             return {
                 "score": 0,
                 "reasons": [f"Domain reputation appears trusted for {registered_domain}."],
-                "provider": "mock",
+                "provider": "local",
             }
 
         for term in sorted(HIGH_RISK_TERMS):
             if term in normalized_url:
                 score += 20
-                reasons.append(f"Mock reputation found high-risk term '{term}' in the URL.")
+                reasons.append(f"Local reputation analysis found high-risk term '{term}' in the URL.")
 
         if parsed.hostname and parsed.hostname.count("-") >= 3:
             score += 10
             reasons.append("Domain contains multiple hyphens, a common phishing pattern.")
 
-        return {"score": min(score, 100), "reasons": reasons, "provider": "mock"}
+        return {"score": min(score, 100), "reasons": reasons, "provider": "local"}
 
 
 reputation_service = ReputationService()

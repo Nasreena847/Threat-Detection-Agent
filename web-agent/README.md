@@ -1,75 +1,85 @@
-# React + TypeScript + Vite
+# 🖥️ TrustTab Frontend Installation & Setup
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+This directory contains the Chrome Extension frontend for TrustTab, built using React, TypeScript, Tailwind CSS, and TanStack Query.
 
-Currently, two official plugins are available:
+> **Naming note:** The underlying agent is registered on CROO as **Threat Detection Agent** (used for the repo name and CAP listing). **TrustTab** is the product/extension name shown in Chrome and the UI. Same project, two labels depending on context.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## 📋 Prerequisites
 
-## React Compiler
+Before you begin, ensure you have the following installed:
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+* **Node.js** (v18 or higher)
+* **npm** (or `pnpm` / `yarn`)
+* **Google Chrome** browser
 
-## Expanding the ESLint configuration
+---
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+## 🚀 Getting Started
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+### 1. Clone the Repository & Navigate to Frontend
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+If you haven't already, clone the main repository and change to the frontend directory:
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-
+```bash
+git clone https://github.com/<your-username>/Threat-Detection-Agent.git
+cd Threat-Detection-Agent/frontend
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+### 2. Install Dependencies
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+Install the required node modules using npm:
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-
+```bash
+npm install
 ```
+
+### 3. Configure the Backend URL
+
+Open `src/services/api.ts` and ensure the API endpoint points to your active backend environment.
+
+**For local development:**
+
+```typescript
+const API_URL = "http://localhost:8000/api/audit";
+```
+
+**For production / cloud deployment:**
+
+```typescript
+const API_URL = "https://your-backend-url/api/audit";
+```
+
+### 4. Build the Extension
+
+Compile the application and bundle the assets into a production-ready package:
+
+```bash
+npm run build
+```
+
+This will generate a static production build folder named `dist` inside your frontend directory.
+
+---
+
+## 🌐 Loading the Extension into Google Chrome
+
+To install and run your newly compiled extension locally, use Chrome's Developer Mode:
+
+1. Open a new tab in Google Chrome and navigate to `chrome://extensions/`
+2. In the top-right corner, toggle the **Developer Mode** switch to **ON**
+3. In the top-left corner, click the **Load unpacked** button
+4. From the file browser dialog, navigate into your project folder and select the newly generated `dist` folder
+
+🎉 The TrustTab extension is now loaded and ready to use!
+
+---
+
+## 🛠️ Development Workflow Note
+
+Whenever you make structural changes to your frontend source files, make sure to run:
+
+```bash
+npm run build
+```
+
+Then, go back to `chrome://extensions/` and click the **Reload** (circular arrow) icon on the **TrustTab** card to apply your latest changes.
