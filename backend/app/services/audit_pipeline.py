@@ -5,11 +5,29 @@ from app.services.risk_engine import calculate_risk
 from app.services.url_analyzer import analyze_url
 
 
-def run_audit_pipeline(url: str, title: str = "", page_text: str = "", html: str = "") -> dict[str, object]:
+def run_audit_pipeline(
+    url: str,
+    title: str = "",
+    page_text: str = "",
+    html: str = "",
+    forms: int | None = None,
+    scripts: int | None = None,
+    password_fields: int | None = None,
+    iframes: int | None = None,
+) -> dict[str, object]:
     """Run the shared deterministic audit pipeline used by both the audit route and CROO integration."""
 
     url_analysis = analyze_url(url)
-    page_analysis = analyze_page(url=url, title=title, page_text=page_text, html=html)
+    page_analysis = analyze_page(
+        url=url,
+        title=title,
+        page_text=page_text,
+        html=html,
+        forms=forms,
+        scripts=scripts,
+        password_fields=password_fields,
+        iframes=iframes,
+    )
     reputation_analysis = reputation_service.analyze(url)
     risk_assessment = calculate_risk(url_analysis, page_analysis, reputation_analysis)
     explanation = generate_explanation(risk_assessment)

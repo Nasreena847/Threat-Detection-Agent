@@ -6,11 +6,11 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from fastapi.testclient import TestClient
-
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app.main import app
+from app.api.audit import audit
+from app.schemas.request import AuditRequest
+from app.services.audit_pipeline import run_audit_pipeline
 from app.services.croo_provider import CrooProvider
 from app.services.croo_service import CrooService
 
@@ -33,22 +33,48 @@ class CrooServiceTests(unittest.TestCase):
         self.assertEqual(result["analysis"]["url"], "https://example.com")
 
     def test_audit_endpoint_returns_risk_assessment(self) -> None:
-        client = TestClient(app)
-        response = client.post(
-            "/api/audit",
-            json={
-                "url": "https://example.com/login",
-                "title": "Example Login",
-                "page_text": "Please verify your account",
-                "html": "<html><body><form></form></body></html>",
-            },
+        result = audit(
+            AuditRequest(
+                url="https://example.com/login",
+                title="Example Login",
+                page_text="Please verify your account",
+                html="<html><body><form></form></body></html>",
+                forms=1,
+                password_fields=1,
+                scripts=8,
+                iframes=0,
+            )
         )
 
-        self.assertEqual(response.status_code, 200)
-        data = response.json()
+        data = result.model_dump()
         self.assertEqual(data["url"], "https://example.com/login")
         self.assertIn(data["risk_level"], {"Safe", "Medium", "High"})
-        self.assertGreaterEqual(data["risk_score"], 0)
+        self.assertGreaterEqual(data["risk_score"], 30)
+
+    def test_pipeline_separates_trusted_and_phishing_like_pages(self) -> None:
+        trusted = run_audit_pipeline(
+            url="https://github.com/openai",
+            title="GitHub",
+            page_text="Open source repository hosting.",
+            forms=0,
+            scripts=12,
+            password_fields=0,
+            iframes=0,
+        )
+        suspicious = run_audit_pipeline(
+            url="http://paypal-secure-login.xyz/verify/account?session=abc123&next=wallet",
+            title="PayPal Security Alert",
+            page_text="Urgent: verify your account password immediately to restore access.",
+            forms=2,
+            scripts=24,
+            password_fields=2,
+            iframes=4,
+        )
+
+        self.assertLessEqual(trusted["risk_score"], 10)
+        self.assertEqual(trusted["risk_level"], "Safe")
+        self.assertGreaterEqual(suspicious["risk_score"], 70)
+        self.assertEqual(suspicious["risk_level"], "High")
 
     def test_provider_start_uses_environment_and_event_stream(self) -> None:
         class FakeEventStream:

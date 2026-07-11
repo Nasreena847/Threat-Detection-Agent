@@ -2,10 +2,32 @@ import asyncio
 import json
 import logging
 import os
+from dataclasses import dataclass
 from typing import Any
 
-from croo import AgentClient, Config, EventStream
-from croo.types import DeliverOrderRequest, NegotiateOrderRequest
+try:
+    from croo import AgentClient, Config, EventStream
+    from croo.types import DeliverOrderRequest, NegotiateOrderRequest
+except ModuleNotFoundError:  # Allows local tests/backend use without the CROO SDK installed.
+    class _MissingCrooSDK:
+        def __init__(self, *_args: Any, **_kwargs: Any) -> None:
+            raise RuntimeError("CROO SDK is not installed. Install the croo package to enable network delivery.")
+
+    AgentClient = _MissingCrooSDK
+    Config = _MissingCrooSDK
+    EventStream = _MissingCrooSDK
+
+    @dataclass(frozen=True)
+    class NegotiateOrderRequest:
+        service_id: str
+        requirements: str
+        metadata: str
+
+    @dataclass(frozen=True)
+    class DeliverOrderRequest:
+        deliverable_type: str
+        deliverable_schema: str
+        deliverable_text: str
 
 from app.services.audit_pipeline import run_audit_pipeline
 
@@ -31,15 +53,12 @@ class CrooProvider:
         if self._started:
             logger.info("CROO Provider already started, skipping")
             return
-        print("API KEY:", bool(self._api_key))
-        print("BASE URL:", self._base_url)
-        print("WS URL:", self._ws_url)
-        print("IS CONFIGURED:", self.is_configured)
         if not self.is_configured:
             logger.warning("CROO SDK not fully configured; skipping provider startup")
             return
 
         logger.info("Starting CROO Provider...")
+        logger.info("CROO provider configured for base_url=%s ws_url=%s", self._base_url, self._ws_url)
         logger.info("Connecting to CROO EventStream...")
         config = Config(base_url=self._base_url, ws_url=self._ws_url)
         self._agent_client = AgentClient(config, self._api_key)
@@ -161,8 +180,21 @@ class CrooProvider:
         title = str(payload.get("title") or payload.get("page_title") or "")
         page_text = str(payload.get("page_text") or payload.get("pageText") or "")
         html = str(payload.get("html") or payload.get("page_html") or "")
+        forms = self._extract_int(payload, "forms", "form_count", "formCount")
+        scripts = self._extract_int(payload, "scripts", "script_count", "scriptCount")
+        password_fields = self._extract_int(payload, "password_fields", "passwordFields", "password_count", "passwordCount")
+        iframes = self._extract_int(payload, "iframes", "iframe_count", "iframeCount")
 
-        return run_audit_pipeline(url=url, title=title, page_text=page_text, html=html)
+        return run_audit_pipeline(
+            url=url,
+            title=title,
+            page_text=page_text,
+            html=html,
+            forms=forms,
+            scripts=scripts,
+            password_fields=password_fields,
+            iframes=iframes,
+        )
 
     def _extract_payload(self, event: Any) -> dict[str, Any]:
         if isinstance(event, dict):
@@ -185,6 +217,17 @@ class CrooProvider:
         if isinstance(nested, dict):
             return self._extract_url(nested)
         return ""
+
+    def _extract_int(self, payload: dict[str, Any], *keys: str) -> int | None:
+        for key in keys:
+            value = payload.get(key)
+            if isinstance(value, bool):
+                continue
+            if isinstance(value, int):
+                return max(0, value)
+            if isinstance(value, str) and value.strip().isdigit():
+                return max(0, int(value.strip()))
+        return None
 
     def _extract_order_id(self, payload: dict[str, Any], event: Any) -> str:
         for key in ("order_id", "orderId"):

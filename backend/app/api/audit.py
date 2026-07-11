@@ -17,6 +17,10 @@ def audit(request: AuditRequest) -> AuditResponse:
         title=request.title,
         page_text=request.page_text or "",
         html=request.html or "",
+        forms=request.forms,
+        scripts=request.scripts,
+        password_fields=request.password_fields,
+        iframes=request.iframes,
     )
 
     return AuditResponse(
