@@ -28,9 +28,11 @@ app.include_router(audit_router)
 def _log_croo_start_result(task: asyncio.Task[None]) -> None:
     try:
         task.result()
+        print(f"CROO provider startup task finished; started={croo_provider._started}", flush=True)
     except asyncio.CancelledError:
         return
-    except Exception:
+    except Exception as exc:
+        print(f"CROO provider background startup failed: {exc}", flush=True)
         logger.exception("CROO provider background startup failed")
 
 
@@ -38,10 +40,22 @@ def _log_croo_start_result(task: asyncio.Task[None]) -> None:
 async def start_croo_provider() -> None:
     global _croo_start_task
 
+    print(
+        "FastAPI startup: "
+        f"croo_provider_configured={croo_provider.is_configured} "
+        f"api_key_set={bool(croo_provider._api_key)} "
+        f"base_url_set={bool(croo_provider._base_url)} "
+        f"ws_url_set={bool(croo_provider._ws_url)} "
+        f"service_id_set={bool(croo_provider._service_id)}",
+        flush=True,
+    )
+
     if not croo_provider.is_configured:
+        print("CROO provider startup skipped because required env vars are missing", flush=True)
         logger.info("CROO provider is not configured; skipping background startup")
         return
 
+    print("CROO provider startup scheduled", flush=True)
     _croo_start_task = asyncio.create_task(croo_provider.start())
     _croo_start_task.add_done_callback(_log_croo_start_result)
 
@@ -50,6 +64,7 @@ async def start_croo_provider() -> None:
 async def stop_croo_provider() -> None:
     global _croo_start_task
 
+    print("FastAPI shutdown: stopping CROO provider", flush=True)
     await croo_provider.stop()
     if _croo_start_task is not None and not _croo_start_task.done():
         _croo_start_task.cancel()
