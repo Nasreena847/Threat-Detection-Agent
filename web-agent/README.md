@@ -49,6 +49,33 @@ const API_URL = "http://localhost:8000/api/audit";
 const API_URL = "https://your-backend-url/api/audit";
 ```
 
+> **Free-tier hosting note:** If the deployed backend URL stops responding after the free trial/free-tier window, the extension is still testable locally. Start the FastAPI backend on your machine and point `API_URL` back to `http://localhost:8000/api/audit`.
+
+### Local Backend Fallback for Testers
+
+From the repository root:
+
+```bash
+cd backend
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env
+uvicorn app.main:app --reload
+```
+
+On Windows, activate the virtual environment with:
+
+```bash
+venv\Scripts\activate
+```
+
+Once running:
+
+* **Local API:** `http://127.0.0.1:8000`
+* **Audit endpoint:** `http://localhost:8000/api/audit`
+* **Swagger docs:** `http://127.0.0.1:8000/docs`
+
 ### 4. Build the Extension
 
 Compile the application and bundle the assets into a production-ready package:
