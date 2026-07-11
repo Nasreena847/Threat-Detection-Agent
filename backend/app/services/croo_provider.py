@@ -1,4 +1,5 @@
 import asyncio
+import inspect
 import json
 import logging
 import os
@@ -7,7 +8,7 @@ from typing import Any
 
 try:
     from croo import AgentClient, Config, EventStream
-    from croo.types import DeliverOrderRequest, NegotiateOrderRequest
+    from croo.types import DeliverableType, DeliverOrderRequest, NegotiateOrderRequest
 except ModuleNotFoundError:  # Allows local tests/backend use without the CROO SDK installed.
     class _MissingCrooSDK:
         def __init__(self, *_args: Any, **_kwargs: Any) -> None:
@@ -16,6 +17,10 @@ except ModuleNotFoundError:  # Allows local tests/backend use without the CROO S
     AgentClient = _MissingCrooSDK
     Config = _MissingCrooSDK
     EventStream = _MissingCrooSDK
+
+    class DeliverableType:
+        TEXT = "text"
+        SCHEMA = "schema"
 
     @dataclass(frozen=True)
     class NegotiateOrderRequest:
@@ -41,6 +46,7 @@ class CrooProvider:
         self._api_key = os.getenv("CROO_API_KEY", "").strip()
         self._base_url = os.getenv("CROO_BASE_URL", "").strip()
         self._ws_url = os.getenv("CROO_WS_URL", "").strip()
+        self._service_id = os.getenv("CROO_SERVICE_ID", "").strip()
         self._agent_client: AgentClient | None = None
         self._event_stream: EventStream | None = None
         self._started = False
@@ -58,16 +64,37 @@ class CrooProvider:
             return
 
         logger.info("Starting CROO Provider...")
-        logger.info("CROO provider configured for base_url=%s ws_url=%s", self._base_url, self._ws_url)
+        logger.info(
+            "CROO provider configured for base_url=%s ws_url=%s service_id=%s",
+            self._base_url,
+            self._ws_url,
+            self._service_id or "not set",
+        )
         logger.info("Connecting to CROO EventStream...")
         config = Config(base_url=self._base_url, ws_url=self._ws_url)
         self._agent_client = AgentClient(config, self._api_key)
-        self._event_stream = EventStream(self._api_key, self._ws_url)
+        if hasattr(self._agent_client, "connect_websocket"):
+            self._event_stream = await self._connect_websocket()
+        else:
+            self._event_stream = EventStream(self._api_key, self._ws_url)
+            await self._event_stream.connect()
         self._event_stream.on_any(self._dispatch_event)
-        await self._event_stream.connect()
         self._started = True
         logger.info("Connected to CROO EventStream")
         logger.info("Listening for events...")
+
+    async def _connect_websocket(self):
+        connect_websocket = self._agent_client.connect_websocket
+        signature = inspect.signature(connect_websocket)
+
+        if self._service_id:
+            for parameter_name in ("service_id", "serviceId", "service"):
+                if parameter_name in signature.parameters:
+                    logger.info("Connecting CROO websocket with %s=%s", parameter_name, self._service_id)
+                    return await connect_websocket(**{parameter_name: self._service_id})
+            logger.info("CROO SDK connect_websocket does not accept service_id; connecting without it")
+
+        return await connect_websocket()
 
     async def stop(self) -> None:
         if self._event_stream is not None:
@@ -92,11 +119,26 @@ class CrooProvider:
     async def _handle_event(self, event: Any) -> None:
         try:
             payload = self._extract_payload(event)
+            negotiation_id = self._extract_negotiation_id(payload, event)
+            order_id = self._extract_order_id(payload, event)
+
+            if negotiation_id and not order_id:
+                await self._accept_negotiation(negotiation_id)
+                return
+
             if not payload:
+                logger.info("Ignoring CROO event without payload: %r", event)
                 return
             await self._deliver_analysis(payload, event)
         except Exception as exc:  # pragma: no cover - runtime path
             logger.exception("CROO event processing failed: %s", exc)
+
+    async def _accept_negotiation(self, negotiation_id: str) -> None:
+        if not self._agent_client:
+            raise RuntimeError("CROO agent client is not initialized")
+
+        await self._agent_client.accept_negotiation(negotiation_id)
+        logger.info("Accepted CROO negotiation=%s", negotiation_id)
 
     def invoke_agent(self, agent_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         analysis = self._perform_analysis(payload)
@@ -120,11 +162,15 @@ class CrooProvider:
             raise
 
     async def _invoke_agent_async(self, agent_id: str, payload: dict[str, Any], analysis: dict[str, Any]) -> dict[str, Any]:
+        service_id = agent_id.strip()
+        if not service_id:
+            raise ValueError("A real CROO service id must be provided; refusing to use a hardcoded fallback.")
+
         await self.start()
         try:
             negotiation = await self._agent_client.negotiate_order(
                 NegotiateOrderRequest(
-                    service_id=agent_id or "threat-detection-agent",
+                    service_id=service_id,
                     requirements="Analyze a website for phishing and trust risk.",
                     metadata=json.dumps(payload),
                 )
@@ -133,9 +179,9 @@ class CrooProvider:
             delivery = await self._agent_client.deliver_order(
                 accept_result.order.order_id,
                 DeliverOrderRequest(
-                    deliverable_type="analysis",
-                    deliverable_schema="application/json",
-                    deliverable_text=json.dumps(analysis),
+                    deliverable_type=DeliverableType.SCHEMA,
+                    deliverable_schema=json.dumps(analysis),
+                    deliverable_text="",
                 ),
             )
             return {
@@ -165,9 +211,9 @@ class CrooProvider:
         await self._agent_client.deliver_order(
             order_id,
             DeliverOrderRequest(
-                deliverable_type="analysis",
-                deliverable_schema="application/json",
-                deliverable_text=json.dumps(analysis),
+                deliverable_type=DeliverableType.SCHEMA,
+                deliverable_schema=json.dumps(analysis),
+                deliverable_text="",
             ),
         )
         logger.info("Delivered CROO analysis for order=%s", order_id)
@@ -200,9 +246,18 @@ class CrooProvider:
         if isinstance(event, dict):
             raw = event
         else:
-            raw = getattr(event, "raw", None)
+            raw = (
+                getattr(event, "payload", None)
+                or getattr(event, "data", None)
+                or getattr(event, "raw", None)
+            )
         if isinstance(raw, dict):
-            payload = raw.get("payload") if isinstance(raw.get("payload"), dict) else raw
+            for key in ("payload", "data", "body"):
+                if isinstance(raw.get(key), dict):
+                    payload = raw[key]
+                    break
+            else:
+                payload = raw
             if not isinstance(payload, dict):
                 return {}
             return payload
@@ -241,12 +296,31 @@ class CrooProvider:
         return ""
 
     def _extract_negotiation_id(self, payload: dict[str, Any], event: Any) -> str:
-        for key in ("negotiation_id", "negotiationId"):
+        for key in ("negotiation_id", "negotiationId", "id"):
             value = payload.get(key)
             if isinstance(value, str) and value.strip():
                 return value.strip()
         if event is not None:
-            value = getattr(event, "negotiation_id", "")
-            if isinstance(value, str) and value.strip():
-                return value.strip()
+            for key in ("negotiation_id", "negotiationId", "id"):
+                value = getattr(event, key, "")
+                if isinstance(value, str) and value.strip():
+                    return value.strip()
         return ""
+
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
+
+    async def _main() -> None:
+        provider = CrooProvider()
+        print("is_configured:", provider.is_configured)
+        await provider.start()
+        print("started:", provider._started)
+        try:
+            await asyncio.Event().wait()
+        except KeyboardInterrupt:
+            pass
+        finally:
+            await provider.stop()
+
+    asyncio.run(_main())

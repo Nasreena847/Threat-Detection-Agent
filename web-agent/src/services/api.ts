@@ -1,7 +1,7 @@
 import type { AuditEvidence, AuditReport, AuditRequest, EvidenceStatus } from '../types/audit'
 import { clampScore, getRecommendation, getVerdict } from '../utils/score'
 
-const API_URL = 'http://localhost:8000/api/audit'
+const API_URL = 'https://threat-detection-agent.onrender.com/api/audit'
 const LOCAL_BACKEND_URL = 'http://127.0.0.1:8000'
 
 type BackendEvidence = {

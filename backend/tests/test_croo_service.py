@@ -127,6 +127,28 @@ class CrooServiceTests(unittest.TestCase):
                 self.assertTrue(provider._event_stream.connected)
                 self.assertEqual(provider._event_stream.sdk_key, "demo-key")
 
+    def test_provider_accepts_negotiation_event_without_delivery(self) -> None:
+        class FakeAgentClient:
+            def __init__(self) -> None:
+                self.accepted_negotiations: list[str] = []
+                self.delivered_orders: list[str] = []
+
+            async def accept_negotiation(self, negotiation_id: str) -> SimpleNamespace:
+                self.accepted_negotiations.append(negotiation_id)
+                return SimpleNamespace(order=SimpleNamespace(order_id="order-1"))
+
+            async def deliver_order(self, order_id: str, request) -> None:
+                self.delivered_orders.append(order_id)
+
+        provider = CrooProvider()
+        provider._started = True
+        provider._agent_client = FakeAgentClient()
+
+        asyncio.run(provider._handle_event({"negotiation_id": "negotiation-1"}))
+
+        self.assertEqual(provider._agent_client.accepted_negotiations, ["negotiation-1"])
+        self.assertEqual(provider._agent_client.delivered_orders, [])
+
 
 if __name__ == "__main__":
     unittest.main()
