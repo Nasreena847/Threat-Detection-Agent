@@ -65,6 +65,8 @@ VIRUSTOTAL_API_KEY=
 VIRUSTOTAL_TIMEOUT_SECONDS=3
 VIRUSTOTAL_CACHE_TTL_SECONDS=3600
 VIRUSTOTAL_SUBMIT_UNKNOWN_URLS=false
+DNS_REPUTATION_ENABLED=true
+DNS_TIMEOUT_SECONDS=2
 ```
 
 ⚠️ **Security Warning:** Never commit your `.env` file or expose your API keys publicly. Ensure `.env` is listed inside your root `.gitignore`.
@@ -144,6 +146,13 @@ VIRUSTOTAL_SUBMIT_UNKNOWN_URLS=false
 ```
 
 The integration does not submit or rescan URLs by default; it only fetches existing URL reports to keep latency, quota use, and privacy risk lower. Set `VIRUSTOTAL_SUBMIT_UNKNOWN_URLS=true` only if you explicitly want unknown URLs submitted to VirusTotal for analysis.
+
+DNS reputation checks are enabled by default when `dnspython` is installed. They inspect public A/AAAA, MX, NS, and TXT records and flag missing address records, private/reserved DNS resolutions, and weak nameserver coverage:
+
+```
+DNS_REPUTATION_ENABLED=true
+DNS_TIMEOUT_SECONDS=2
+```
 
 ---
 

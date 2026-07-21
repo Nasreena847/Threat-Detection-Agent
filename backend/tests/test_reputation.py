@@ -5,10 +5,18 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app.services.reputation import ReputationService, VirusTotalClient, _virustotal_url_id
+from app.services.reputation import DNSReputationClient, ReputationService, VirusTotalClient, _virustotal_url_id
 
 
 class FakeVirusTotalClient:
+    def __init__(self, result: dict[str, object] | None) -> None:
+        self.result = result
+
+    def analyze_url(self, url: str) -> dict[str, object] | None:
+        return self.result
+
+
+class FakeDNSClient:
     def __init__(self, result: dict[str, object] | None) -> None:
         self.result = result
 
@@ -30,7 +38,7 @@ class ReputationTests(unittest.TestCase):
         self.assertEqual(_virustotal_url_id("https://example.com"), "aHR0cHM6Ly9leGFtcGxlLmNvbQ")
 
     def test_reputation_uses_local_result_without_virustotal(self) -> None:
-        service = ReputationService(FakeVirusTotalClient(None))
+        service = ReputationService(FakeVirusTotalClient(None), FakeDNSClient(None))
 
         result = service.analyze("https://github.com/openai")
 
@@ -48,7 +56,8 @@ class ReputationTests(unittest.TestCase):
                     "stats": {"malicious": 3, "suspicious": 1, "harmless": 20, "undetected": 10},
                     "reputation": -5,
                 }
-            )
+            ),
+            FakeDNSClient(None),
         )
 
         result = service.analyze("https://unknown-example.test/login")
@@ -57,6 +66,27 @@ class ReputationTests(unittest.TestCase):
         self.assertGreaterEqual(result["score"], 70)
         self.assertIn("virustotal", result)
         self.assertIn("VirusTotal", " ".join(result["reasons"]))
+
+    def test_reputation_merges_dns_anomalies(self) -> None:
+        service = ReputationService(
+            FakeVirusTotalClient(None),
+            FakeDNSClient(
+                {
+                    "score": 35,
+                    "reasons": ["DNS check resolved the hostname to private, local, or reserved address space."],
+                    "provider": "dns",
+                    "available": True,
+                    "records": {"a": ["10.0.0.10"], "aaaa": [], "mx": [], "ns": ["ns1.example.test"], "txt": []},
+                }
+            ),
+        )
+
+        result = service.analyze("https://unknown-example.test/login")
+
+        self.assertEqual(result["provider"], "local+dns")
+        self.assertGreaterEqual(result["score"], 35)
+        self.assertIn("dns", result)
+        self.assertIn("DNS check", " ".join(result["reasons"]))
 
     def test_virustotal_client_caches_reports(self) -> None:
         response = FakeResponse(
@@ -102,6 +132,15 @@ class ReputationTests(unittest.TestCase):
         self.assertEqual(post_mock.call_count, 1)
         self.assertTrue(result["submitted"])
         self.assertEqual(result["analysis_id"], "analysis-123")
+
+    def test_dns_client_returns_unavailable_without_resolver_dependency(self) -> None:
+        client = DNSReputationClient(enabled=True, timeout_seconds=1)
+
+        with patch("app.services.reputation.dns", None):
+            result = client.analyze_url("https://example.com")
+
+        self.assertEqual(result["provider"], "dns")
+        self.assertFalse(result["available"])
 
 
 if __name__ == "__main__":

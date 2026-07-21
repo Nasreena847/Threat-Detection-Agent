@@ -28,3 +28,7 @@ services:
         value: "3600"
       - key: VIRUSTOTAL_SUBMIT_UNKNOWN_URLS
         value: "false"
+      - key: DNS_REPUTATION_ENABLED
+        value: "true"
+      - key: DNS_TIMEOUT_SECONDS
+        value: "2"

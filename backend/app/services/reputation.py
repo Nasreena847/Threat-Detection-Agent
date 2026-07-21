@@ -9,6 +9,12 @@ import tldextract
 
 from app.config import settings
 
+try:
+    import dns.exception
+    import dns.resolver
+except ModuleNotFoundError:  # DNS reputation is optional in lean local environments.
+    dns = None
+
 KNOWN_TRUSTED_DOMAINS = {
     "google.com",
     "github.com",
@@ -37,6 +43,32 @@ def _clamp_score(score: int) -> int:
 
 def _virustotal_url_id(url: str) -> str:
     return base64.urlsafe_b64encode(url.encode()).decode().rstrip("=")
+
+
+def _registered_domain(url: str) -> str:
+    extracted = extract_domain(url)
+    return ".".join(part for part in [extracted.domain, extracted.suffix] if part).lower()
+
+
+def _hostname(url: str) -> str:
+    return (urlparse(url).hostname or "").lower().strip(".")
+
+
+def _is_private_dns_ip(value: str) -> bool:
+    try:
+        import ipaddress
+
+        ip_address = ipaddress.ip_address(value)
+    except ValueError:
+        return False
+
+    return (
+        ip_address.is_private
+        or ip_address.is_loopback
+        or ip_address.is_link_local
+        or ip_address.is_reserved
+        or ip_address.is_unspecified
+    )
 
 
 def _score_virustotal_stats(stats: dict[str, object]) -> int:
@@ -220,6 +252,122 @@ class VirusTotalClient:
         }
 
 
+class DNSReputationClient:
+    def __init__(self, enabled: bool, timeout_seconds: float) -> None:
+        self._enabled = enabled
+        self._timeout_seconds = timeout_seconds
+
+    def analyze_url(self, url: str) -> dict[str, object] | None:
+        if not self._enabled:
+            return None
+
+        if dns is None:
+            return {
+                "score": 0,
+                "reasons": ["DNS reputation checks are unavailable because dnspython is not installed."],
+                "provider": "dns",
+                "available": False,
+            }
+
+        hostname = _hostname(url)
+        registered_domain = _registered_domain(url)
+        if not hostname:
+            return {
+                "score": 15,
+                "reasons": ["DNS reputation could not inspect the URL because no hostname was present."],
+                "provider": "dns",
+                "available": True,
+                "records": {},
+            }
+
+        resolver = dns.resolver.Resolver()
+        resolver.timeout = self._timeout_seconds
+        resolver.lifetime = self._timeout_seconds
+
+        records = {
+            "a": self._resolve_records(resolver, hostname, "A"),
+            "aaaa": self._resolve_records(resolver, hostname, "AAAA"),
+            "mx": self._resolve_records(resolver, registered_domain, "MX"),
+            "ns": self._resolve_records(resolver, registered_domain, "NS"),
+            "txt": self._resolve_records(resolver, registered_domain, "TXT"),
+        }
+
+        if not any(records.values()):
+            return {
+                "score": 0,
+                "reasons": ["DNS reputation lookup returned no records and was treated as unavailable."],
+                "provider": "dns",
+                "available": False,
+                "records": records,
+            }
+
+        score = 0
+        reasons: list[str] = []
+        address_records = [*records["a"], *records["aaaa"]]
+
+        if not address_records:
+            score += 18
+            reasons.append("DNS check found no A or AAAA records for the hostname.")
+
+        private_addresses = [address for address in address_records if _is_private_dns_ip(address)]
+        if private_addresses:
+            score += 35
+            reasons.append("DNS check resolved the hostname to private, local, or reserved address space.")
+
+        if not records["ns"]:
+            score += 12
+            reasons.append("DNS check found no nameserver records for the registered domain.")
+        elif len(records["ns"]) == 1:
+            score += 5
+            reasons.append("DNS check found only one nameserver, which reduces resilience.")
+
+        if not records["mx"]:
+            reasons.append("DNS check found no MX records; this is acceptable for some sites but lowers domain context.")
+
+        if len(set(address_records)) >= 4:
+            reasons.append("DNS check found multiple public address records, which is common for established services.")
+
+        if not reasons:
+            reasons.append("DNS reputation checks found normal public DNS records.")
+
+        return {
+            "score": _clamp_score(score),
+            "reasons": reasons,
+            "provider": "dns",
+            "available": True,
+            "records": records,
+        }
+
+    def _resolve_records(self, resolver, name: str, record_type: str) -> list[str]:
+        if not name:
+            return []
+
+        try:
+            answers = resolver.resolve(name, record_type)
+        except (
+            dns.resolver.NXDOMAIN,
+            dns.resolver.NoAnswer,
+            dns.resolver.NoNameservers,
+            dns.exception.Timeout,
+        ):
+            return []
+        except Exception as exc:  # pragma: no cover - defensive resolver path
+            logger.warning("DNS lookup failed for %s %s: %s", name, record_type, exc)
+            return []
+
+        values: list[str] = []
+        for answer in answers:
+            if record_type == "MX":
+                exchange = getattr(answer, "exchange", "")
+                values.append(str(exchange).rstrip("."))
+            elif record_type == "TXT":
+                strings = getattr(answer, "strings", [])
+                values.append(" ".join(part.decode(errors="ignore") for part in strings))
+            else:
+                values.append(str(answer).rstrip("."))
+        return values
+
+
 class ReputationService:
     """Abstraction for domain reputation providers.
 
@@ -227,28 +375,33 @@ class ReputationService:
     threat intelligence when VIRUSTOTAL_API_KEY is configured.
     """
 
-    def __init__(self, virustotal_client: VirusTotalClient | None = None) -> None:
+    def __init__(
+        self,
+        virustotal_client: VirusTotalClient | None = None,
+        dns_client: DNSReputationClient | None = None,
+    ) -> None:
         self._virustotal_client = virustotal_client or VirusTotalClient(
             settings.virustotal_api_key,
             settings.virustotal_timeout_seconds,
             settings.virustotal_cache_ttl_seconds,
             settings.virustotal_submit_unknown_urls,
         )
+        self._dns_client = dns_client or DNSReputationClient(
+            settings.dns_reputation_enabled,
+            settings.dns_timeout_seconds,
+        )
 
     def analyze(self, url: str) -> dict[str, object]:
         local_result = self._analyze_local(url)
+        dns_result = self._dns_client.analyze_url(url)
         virustotal_result = self._virustotal_client.analyze_url(url)
-        if virustotal_result is None:
-            return local_result
+        provider_results = [result for result in (local_result, dns_result, virustotal_result) if result is not None]
 
-        return self._merge_results(local_result, virustotal_result)
+        return self._merge_results(provider_results)
 
     def _analyze_local(self, url: str) -> dict[str, object]:
         parsed = urlparse(url)
-        extracted = extract_domain(url)
-        registered_domain = ".".join(
-            part for part in [extracted.domain, extracted.suffix] if part
-        ).lower()
+        registered_domain = _registered_domain(url)
         normalized_url = url.lower()
 
         score = 8
@@ -272,30 +425,48 @@ class ReputationService:
 
         return {"score": min(score, 100), "reasons": reasons, "provider": "local"}
 
-    def _merge_results(self, local_result: dict[str, object], virustotal_result: dict[str, object]) -> dict[str, object]:
-        local_score = int(local_result.get("score", 0))
-        virustotal_score = int(virustotal_result.get("score", 0))
-        score = max(local_score, virustotal_score)
+    def _merge_results(self, provider_results: list[dict[str, object]]) -> dict[str, object]:
+        scores = {str(result.get("provider")): int(result.get("score", 0)) for result in provider_results}
+        local_result = self._result_for_provider(provider_results, "local")
+        dns_result = self._result_for_provider(provider_results, "dns")
+        virustotal_result = self._result_for_provider(provider_results, "virustotal")
+        local_score = int(local_result.get("score", 0)) if local_result else 0
+        dns_score = int(dns_result.get("score", 0)) if dns_result else 0
+        virustotal_score = int(virustotal_result.get("score", 0)) if virustotal_result else 0
+        score = max(scores.values(), default=0)
 
         if virustotal_score >= 45:
             score = max(score, round((local_score * 0.25) + (virustotal_score * 0.75)))
+        if dns_score >= 30 and local_score >= 15:
+            score = max(score, round((dns_score * 0.55) + (local_score * 0.45)))
 
         return {
             "score": _clamp_score(score),
-            "reasons": [*self._reasons(local_result), *self._reasons(virustotal_result)],
-            "provider": "local+virustotal",
+            "reasons": [reason for result in provider_results for reason in self._reasons(result)],
+            "provider": "+".join(str(result.get("provider")) for result in provider_results),
+            "dns": {
+                "available": bool(dns_result.get("available")) if dns_result else False,
+                "score": dns_score,
+                "records": dns_result.get("records", {}) if dns_result else {},
+            },
             "virustotal": {
-                "available": bool(virustotal_result.get("available")),
-                "cache": virustotal_result.get("cache"),
-                "submitted": bool(virustotal_result.get("submitted")),
-                "analysis_id": virustotal_result.get("analysis_id"),
+                "available": bool(virustotal_result.get("available")) if virustotal_result else False,
+                "cache": virustotal_result.get("cache") if virustotal_result else None,
+                "submitted": bool(virustotal_result.get("submitted")) if virustotal_result else False,
+                "analysis_id": virustotal_result.get("analysis_id") if virustotal_result else None,
                 "score": virustotal_score,
-                "stats": virustotal_result.get("stats", {}),
-                "reputation": virustotal_result.get("reputation"),
-                "last_analysis_date": virustotal_result.get("last_analysis_date"),
-                "permalink": virustotal_result.get("permalink"),
+                "stats": virustotal_result.get("stats", {}) if virustotal_result else {},
+                "reputation": virustotal_result.get("reputation") if virustotal_result else None,
+                "last_analysis_date": virustotal_result.get("last_analysis_date") if virustotal_result else None,
+                "permalink": virustotal_result.get("permalink") if virustotal_result else None,
             },
         }
+
+    def _result_for_provider(self, provider_results: list[dict[str, object]], provider: str) -> dict[str, object] | None:
+        for result in provider_results:
+            if result.get("provider") == provider:
+                return result
+        return None
 
     def _reasons(self, result: dict[str, object]) -> list[str]:
         reasons = result.get("reasons", [])

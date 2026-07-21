@@ -74,6 +74,7 @@ def calculate_risk(
         },
         "threat_intel": {
             "provider": reputation_analysis.get("provider"),
+            "dns": reputation_analysis.get("dns"),
             "virustotal": reputation_analysis.get("virustotal"),
         },
     }

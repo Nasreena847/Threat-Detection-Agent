@@ -28,6 +28,8 @@ class Settings:
     virustotal_timeout_seconds: float = float(os.getenv("VIRUSTOTAL_TIMEOUT_SECONDS", "3"))
     virustotal_cache_ttl_seconds: int = int(os.getenv("VIRUSTOTAL_CACHE_TTL_SECONDS", "3600"))
     virustotal_submit_unknown_urls: bool = _env_bool("VIRUSTOTAL_SUBMIT_UNKNOWN_URLS")
+    dns_reputation_enabled: bool = _env_bool("DNS_REPUTATION_ENABLED", True)
+    dns_timeout_seconds: float = float(os.getenv("DNS_TIMEOUT_SECONDS", "2"))
 
 
 settings = Settings()
