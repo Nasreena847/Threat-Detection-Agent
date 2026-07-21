@@ -37,4 +37,8 @@ export type AuditRequest = {
   favicon: string
   https: boolean
   page_text?: string
+  forms?: number
+  scripts?: number
+  password_fields?: number
+  iframes?: number
 }

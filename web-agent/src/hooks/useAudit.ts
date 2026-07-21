@@ -4,7 +4,7 @@ import type { AuditReport } from '../types/audit'
 import type { WebsiteInfo } from '../types/website'
 
 const previewAudit: AuditReport = {
-  score: 92,
+  score: 8,
   verdict: 'SAFE',
   summary: 'This website appears safe. No significant phishing indicators were detected.',
   recommendation: 'Safe to Browse',
@@ -77,6 +77,10 @@ export function useAudit(website?: WebsiteInfo) {
         favicon: website.favicon,
         https: website.https,
         page_text: website.pageText || '',
+        forms: website.forms,
+        scripts: website.scripts,
+        password_fields: website.passwordFields,
+        iframes: website.iframes,
       })
     },
   })

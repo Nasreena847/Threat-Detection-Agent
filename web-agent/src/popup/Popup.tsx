@@ -60,7 +60,13 @@ export default function Popup() {
                 initial={{ opacity: 0, y: 8 }}
                 key="report"
               >
-                {errorMessage ? <ErrorCard message={errorMessage} onRetry={handleRefresh} /> : null}
+                {errorMessage ? (
+                  <ErrorCard
+                    message={errorMessage}
+                    onRetry={handleRefresh}
+                    showLocalSetup={auditQuery.error instanceof Error}
+                  />
+                ) : null}
                 {website ? <WebsiteCard website={website} /> : null}
                 {audit ? (
                   <>

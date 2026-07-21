@@ -14,6 +14,7 @@ class AuditResponse(BaseModel):
     recommendation: str
     explanation: str
     evidence: list[str] = Field(default_factory=list)
+    threat_intel: dict[str, object] = Field(default_factory=dict)
     croo: CrooAuditResponse = Field(default_factory=CrooAuditResponse)
 
 

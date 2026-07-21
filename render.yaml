@@ -1,0 +1,30 @@
+services:
+  - type: web
+    name: threat-detection-agent-backend
+    env: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: sh start.sh
+    envVars:
+      - key: CROO_BASE_URL
+        value: https://api.croo.network
+      - key: CROO_WS_URL
+        value: wss://api.croo.network/ws
+      - key: CROO_API_KEY
+        sync: false
+      - key: CROO_SERVICE_ID
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      - key: AUDIT_RATE_LIMIT_PER_MINUTE
+        value: "60"
+      - key: AUDIT_API_KEY
+        sync: false
+      - key: VIRUSTOTAL_API_KEY
+        sync: false
+      - key: VIRUSTOTAL_TIMEOUT_SECONDS
+        value: "3"
+      - key: VIRUSTOTAL_CACHE_TTL_SECONDS
+        value: "3600"
+      - key: VIRUSTOTAL_SUBMIT_UNKNOWN_URLS
+        value: "false"

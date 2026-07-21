@@ -2,6 +2,7 @@ import type { AuditEvidence, AuditReport, AuditRequest, EvidenceStatus } from '.
 import { clampScore, getRecommendation, getVerdict } from '../utils/score'
 
 const API_URL = 'http://localhost:8000/api/audit'
+const LOCAL_BACKEND_URL = 'http://127.0.0.1:8000'
 
 type BackendEvidence = {
   id?: unknown
@@ -116,18 +117,30 @@ const writeCachedAudit = (domain: string, report: AuditReport) => {
 }
 
 export async function auditWebsite(payload: AuditRequest): Promise<AuditReport> {
-  const response = await fetch(API_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(payload),
-  })
+  let response: Response
+
+  try {
+    response = await fetch(API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    })
+  } catch {
+    const cached = readCachedAudit(payload.domain)
+    if (cached) return cached
+    throw new Error(
+      `The audit API is not reachable. The hosted free-tier backend may be unavailable. Run the backend locally at ${LOCAL_BACKEND_URL} and retry.`,
+    )
+  }
 
   if (!response.ok) {
     const cached = readCachedAudit(payload.domain)
     if (cached) return cached
-    throw new Error(`Audit service returned ${response.status}`)
+    throw new Error(
+      `Audit service returned ${response.status}. If the hosted free-tier backend is unavailable, run the backend locally at ${LOCAL_BACKEND_URL}.`,
+    )
   }
 
   const data = (await response.json()) as BackendAuditResponse

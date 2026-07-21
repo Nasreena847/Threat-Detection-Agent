@@ -33,11 +33,28 @@ def calculate_risk(
 ) -> dict[str, object]:
     """Merge analyzer scores into a single user-facing risk assessment."""
 
+    url_score = _score(url_analysis)
+    page_score = _score(page_analysis)
+    reputation_score = _score(reputation_analysis)
+    max_component = max(url_score, page_score, reputation_score)
     weighted_score = round(
-        (_score(url_analysis) * 0.35)
-        + (_score(page_analysis) * 0.45)
-        + (_score(reputation_analysis) * 0.20)
+        (url_score * 0.38)
+        + (page_score * 0.47)
+        + (reputation_score * 0.15)
     )
+
+    if max_component >= 70:
+        weighted_score = max(weighted_score, round(max_component * 0.72))
+    elif max_component >= 45:
+        weighted_score = max(weighted_score, round(max_component * 0.65))
+    elif max_component >= 25:
+        weighted_score = max(weighted_score, round(max_component * 0.55))
+
+    if url_score >= 25 and page_score >= 25:
+        weighted_score += 10
+    elif url_score >= 18 and page_score >= 18:
+        weighted_score += 6
+
     risk_score = max(0, min(weighted_score, 100))
     reasons = (
         _reasons(url_analysis)
@@ -51,8 +68,12 @@ def calculate_risk(
         "reasons": reasons,
         "recommendation": _recommendation(risk_score),
         "components": {
-            "url": _score(url_analysis),
-            "page": _score(page_analysis),
-            "reputation": _score(reputation_analysis),
+            "url": url_score,
+            "page": page_score,
+            "reputation": reputation_score,
+        },
+        "threat_intel": {
+            "provider": reputation_analysis.get("provider"),
+            "virustotal": reputation_analysis.get("virustotal"),
         },
     }

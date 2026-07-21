@@ -9,16 +9,16 @@ export const getVerdict = (score: number, value?: string): AuditVerdict => {
     return normalized
   }
 
-  if (score >= 80) return 'SAFE'
-  if (score >= 55) return 'CAUTION'
+  if (score <= 25) return 'SAFE'
+  if (score <= 60) return 'CAUTION'
   return 'RISKY'
 }
 
 export const getRecommendation = (score: number, value?: string): AuditRecommendation => {
   if (value) return value
-  if (score >= 85) return 'Safe to Browse'
-  if (score >= 70) return 'Browse Only'
-  if (score >= 55) return 'Avoid Login'
-  if (score >= 35) return 'Avoid Payments'
+  if (score <= 25) return 'Safe to Browse'
+  if (score <= 45) return 'Browse Only'
+  if (score <= 60) return 'Avoid Login'
+  if (score <= 80) return 'Avoid Payments'
   return 'Leave Immediately'
 }
