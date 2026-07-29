@@ -22,7 +22,7 @@ If you haven't already, clone the main repository and change to the frontend dir
 
 ```bash
 git clone https://github.com/<your-username>/Threat-Detection-Agent.git
-cd Threat-Detection-Agent/frontend
+cd Threat-Detection-Agent/web-agent
 ```
 
 ### 2. Install Dependencies

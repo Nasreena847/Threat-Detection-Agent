@@ -84,7 +84,7 @@ def _order_id(value: Any) -> str:
 
 async def run_requester(target_url: str) -> None:
     base_url = _required_env("CROO_BASE_URL")
-    requester_api_key = _required_env("CROO_API_KEY")
+    requester_api_key = _required_env("CROO_REQUESTER_API_KEY")
     service_id = _required_env("CROO_SERVICE_ID")
 
     config = Config(base_url=base_url, ws_url=_derive_ws_url(base_url))

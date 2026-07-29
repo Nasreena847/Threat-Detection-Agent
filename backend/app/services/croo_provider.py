@@ -1,11 +1,40 @@
 import asyncio
 import inspect
+import inspect
 import json
 import logging
 import os
 from dataclasses import dataclass
+from dataclasses import dataclass
 from typing import Any
 
+try:
+    from croo import AgentClient, Config, EventStream
+    from croo.types import DeliverableType, DeliverOrderRequest, NegotiateOrderRequest
+except ModuleNotFoundError:  # Allows local tests/backend use without the CROO SDK installed.
+    class _MissingCrooSDK:
+        def __init__(self, *_args: Any, **_kwargs: Any) -> None:
+            raise RuntimeError("CROO SDK is not installed. Install the croo package to enable network delivery.")
+
+    AgentClient = _MissingCrooSDK
+    Config = _MissingCrooSDK
+    EventStream = _MissingCrooSDK
+
+    class DeliverableType:
+        TEXT = "text"
+        SCHEMA = "schema"
+
+    @dataclass(frozen=True)
+    class NegotiateOrderRequest:
+        service_id: str
+        requirements: str
+        metadata: str
+
+    @dataclass(frozen=True)
+    class DeliverOrderRequest:
+        deliverable_type: str
+        deliverable_schema: str
+        deliverable_text: str
 try:
     from croo import AgentClient, Config, EventStream
     from croo.types import DeliverableType, DeliverOrderRequest, NegotiateOrderRequest
@@ -47,6 +76,7 @@ class CrooProvider:
         self._base_url = os.getenv("CROO_BASE_URL", "").strip()
         self._ws_url = os.getenv("CROO_WS_URL", "").strip()
         self._service_id = os.getenv("CROO_SERVICE_ID", "").strip()
+        self._service_id = os.getenv("CROO_SERVICE_ID", "").strip()
         self._agent_client: AgentClient | None = None
         self._event_stream: EventStream | None = None
         self._started = False
@@ -70,9 +100,20 @@ class CrooProvider:
             self._ws_url,
             self._service_id or "not set",
         )
+        logger.info(
+            "CROO provider configured for base_url=%s ws_url=%s service_id=%s",
+            self._base_url,
+            self._ws_url,
+            self._service_id or "not set",
+        )
         logger.info("Connecting to CROO EventStream...")
         config = Config(base_url=self._base_url, ws_url=self._ws_url)
         self._agent_client = AgentClient(config, self._api_key)
+        if hasattr(self._agent_client, "connect_websocket"):
+            self._event_stream = await self._connect_websocket()
+        else:
+            self._event_stream = EventStream(self._api_key, self._ws_url)
+            await self._event_stream.connect()
         if hasattr(self._agent_client, "connect_websocket"):
             self._event_stream = await self._connect_websocket()
         else:
@@ -82,6 +123,19 @@ class CrooProvider:
         self._started = True
         logger.info("Connected to CROO EventStream")
         logger.info("Listening for events...")
+
+    async def _connect_websocket(self):
+        connect_websocket = self._agent_client.connect_websocket
+        signature = inspect.signature(connect_websocket)
+
+        if self._service_id:
+            for parameter_name in ("service_id", "serviceId", "service"):
+                if parameter_name in signature.parameters:
+                    logger.info("Connecting CROO websocket with %s=%s", parameter_name, self._service_id)
+                    return await connect_websocket(**{parameter_name: self._service_id})
+            logger.info("CROO SDK connect_websocket does not accept service_id; connecting without it")
+
+        return await connect_websocket()
 
     async def _connect_websocket(self):
         connect_websocket = self._agent_client.connect_websocket

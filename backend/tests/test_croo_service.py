@@ -99,7 +99,8 @@ class CrooServiceTests(unittest.TestCase):
                 self.sdk_key = sdk_key
                 self.stream = None
 
-            async def connect_websocket(self) -> FakeEventStream:
+            async def connect_websocket(self, service_id: str | None = None) -> FakeEventStream:
+                self.service_id = service_id
                 self.stream = FakeEventStream(self.sdk_key, self.config.ws_url)
                 await self.stream.connect()
                 return self.stream
@@ -113,6 +114,7 @@ class CrooServiceTests(unittest.TestCase):
                 "CROO_API_KEY": "demo-key",
                 "CROO_BASE_URL": "https://demo.example",
                 "CROO_WS_URL": "wss://demo.example/ws",
+                "CROO_SERVICE_ID": "service-123",
             },
             clear=False,
         ):
@@ -126,6 +128,30 @@ class CrooServiceTests(unittest.TestCase):
                 self.assertIsNotNone(provider._event_stream)
                 self.assertTrue(provider._event_stream.connected)
                 self.assertEqual(provider._event_stream.sdk_key, "demo-key")
+                self.assertIs(provider._agent_client.stream, provider._event_stream)
+                self.assertEqual(provider._agent_client.service_id, "service-123")
+
+    def test_provider_accepts_negotiation_event_without_delivery(self) -> None:
+        class FakeAgentClient:
+            def __init__(self) -> None:
+                self.accepted_negotiations: list[str] = []
+                self.delivered_orders: list[str] = []
+
+            async def accept_negotiation(self, negotiation_id: str) -> SimpleNamespace:
+                self.accepted_negotiations.append(negotiation_id)
+                return SimpleNamespace(order=SimpleNamespace(order_id="order-1"))
+
+            async def deliver_order(self, order_id: str, request) -> None:
+                self.delivered_orders.append(order_id)
+
+        provider = CrooProvider()
+        provider._started = True
+        provider._agent_client = FakeAgentClient()
+
+        asyncio.run(provider._handle_event({"negotiation_id": "negotiation-1"}))
+
+        self.assertEqual(provider._agent_client.accepted_negotiations, ["negotiation-1"])
+        self.assertEqual(provider._agent_client.delivered_orders, [])
 
     def test_provider_accepts_negotiation_event_without_delivery(self) -> None:
         class FakeAgentClient:

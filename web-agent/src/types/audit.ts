@@ -40,5 +40,5 @@ export type AuditRequest = {
   forms?: number
   scripts?: number
   password_fields?: number
-  iframes?: number    
+  iframes?: number
 }

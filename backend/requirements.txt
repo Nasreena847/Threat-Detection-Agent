@@ -6,3 +6,4 @@ tldextract
 httpx
 uvicorn
 croo-sdk
+dnspython
