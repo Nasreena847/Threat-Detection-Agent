@@ -30,13 +30,16 @@ def calculate_risk(
     url_analysis: AnalysisResult,
     page_analysis: AnalysisResult,
     reputation_analysis: AnalysisResult,
+    ml_analysis: AnalysisResult | None = None,
 ) -> dict[str, object]:
     """Merge analyzer scores into a single user-facing risk assessment."""
 
     url_score = _score(url_analysis)
     page_score = _score(page_analysis)
     reputation_score = _score(reputation_analysis)
-    max_component = max(url_score, page_score, reputation_score)
+    ml_available = bool((ml_analysis or {}).get("available"))
+    ml_score = _score(ml_analysis or {}) if ml_available else 0
+    max_component = max(url_score, page_score, reputation_score, ml_score)
     weighted_score = round(
         (url_score * 0.38)
         + (page_score * 0.47)
@@ -55,11 +58,17 @@ def calculate_risk(
     elif url_score >= 18 and page_score >= 18:
         weighted_score += 6
 
+    if ml_available and ml_score >= 50:
+        weighted_score = max(weighted_score, round((weighted_score * 0.72) + (ml_score * 0.28)))
+    if ml_available and ml_score >= 80:
+        weighted_score = max(weighted_score, round(ml_score * 0.78))
+
     risk_score = max(0, min(weighted_score, 100))
     reasons = (
         _reasons(url_analysis)
         + _reasons(page_analysis)
         + _reasons(reputation_analysis)
+        + (_reasons(ml_analysis or {}) if ml_available else [])
     )
 
     return {
@@ -71,10 +80,20 @@ def calculate_risk(
             "url": url_score,
             "page": page_score,
             "reputation": reputation_score,
+            "ml": ml_score,
         },
         "threat_intel": {
             "provider": reputation_analysis.get("provider"),
             "dns": reputation_analysis.get("dns"),
             "virustotal": reputation_analysis.get("virustotal"),
+        },
+        "ml": {
+            "available": ml_available,
+            "score": ml_score,
+            "probability": (ml_analysis or {}).get("probability"),
+            "threshold": (ml_analysis or {}).get("threshold"),
+            "verdict": (ml_analysis or {}).get("verdict"),
+            "model_path": (ml_analysis or {}).get("model_path"),
+            "feature_count": (ml_analysis or {}).get("feature_count"),
         },
     }

@@ -30,6 +30,10 @@ class Settings:
     virustotal_submit_unknown_urls: bool = _env_bool("VIRUSTOTAL_SUBMIT_UNKNOWN_URLS")
     dns_reputation_enabled: bool = _env_bool("DNS_REPUTATION_ENABLED", True)
     dns_timeout_seconds: float = float(os.getenv("DNS_TIMEOUT_SECONDS", "2"))
+    ml_classifier_enabled: bool = _env_bool("ML_CLASSIFIER_ENABLED", True)
+    ml_model_path: str = os.getenv("ML_MODEL_PATH", "model/url_only_model.joblib").strip()
+    ml_feature_manifest_path: str = os.getenv("ML_FEATURE_MANIFEST_PATH", "model/feature_manifest.json").strip()
+    ml_phishing_threshold: float = float(os.getenv("ML_PHISHING_THRESHOLD", "0.5"))
 
 
 settings = Settings()

@@ -23,7 +23,7 @@
 
 Threat Detection Agent is an explainable browser security project. The user-facing product is the Chrome extension named **TrustTab**. The CROO-facing service is registered as **Threat Detection Agent**.
 
-The project analyzes the active browser tab and returns a deterministic risk report. It does not use a production ML model yet. The current engine is rule-based and explainable, with optional external threat-intelligence enrichment through VirusTotal.
+The project analyzes the active browser tab and returns an explainable risk report. The core engine remains rule-based and transparent, with optional DNS, VirusTotal, and Random Forest phishing-classifier enrichment.
 
 Primary goals:
 
@@ -37,7 +37,7 @@ Technology stack:
 
 - Frontend/extension: React, TypeScript, Vite, Tailwind CSS, Framer Motion, TanStack Query, Chrome Manifest V3 APIs.
 - Backend: Python, FastAPI, Pydantic, Uvicorn.
-- Security/reputation: deterministic URL/page rules, DNS reputation checks, optional VirusTotal v3 URL report lookup.
+- Security/reputation: deterministic URL/page rules, DNS reputation checks, optional VirusTotal v3 URL report lookup, optional Random Forest phishing classifier.
 - CROO: `croo` SDK, `AgentClient`, `EventStream`, schema deliverables.
 - Deployment: Render Web Service via `render.yaml` and `backend/start.sh`.
 
@@ -54,12 +54,14 @@ flowchart TD
     Pipeline --> URL[URL analyzer]
     Pipeline --> Page[Page analyzer]
     Pipeline --> Reputation[Reputation service]
+    Pipeline --> ML[ML classifier, optional]
     Reputation --> LocalRep[Local deterministic reputation]
     Reputation --> DNS[DNS reputation]
     Reputation --> VT[VirusTotal, optional]
     URL --> Risk[Risk engine]
     Page --> Risk
     Reputation --> Risk
+    ML --> Risk
     Risk --> Explain[Deterministic explanation]
     Explain --> API
     API --> Popup
@@ -97,6 +99,12 @@ Threat-Detection-Agent/
 │   ├── requirements.txt
 │   ├── start.sh
 │   ├── .env.example
+│   ├── model/
+│   │   ├── dataset_small.csv
+│   │   ├── feature_manifest.json
+│   │   ├── full_model.joblib
+│   │   ├── train_classifier.py
+│   │   └── url_only_model.joblib
 │   ├── app/
 │   │   ├── main.py
 │   │   ├── config.py
@@ -110,6 +118,7 @@ Threat-Detection-Agent/
 │   │       ├── audit_pipeline.py
 │   │       ├── url_analyzer.py
 │   │       ├── page_analyzer.py
+│   │       ├── ml_classifier.py
 │   │       ├── reputation.py
 │   │       ├── risk_engine.py
 │   │       ├── explanation.py
@@ -119,6 +128,7 @@ Threat-Detection-Agent/
 │   │       └── test_requester.py
 │   └── tests/
 │       ├── test_croo_service.py
+│       ├── test_ml_classifier.py
 │       ├── test_reputation.py
 │       └── test_security_controls.py
 └── web-agent/
@@ -327,9 +337,48 @@ VirusTotal signals:
 - `last_analysis_date`
 - report permalink
 
+### ML Classifier
+
+Purpose: Run the trained Random Forest phishing classifier as an additional risk signal.
+
+Implemented in:
+
+- `backend/app/services/ml_classifier.py`
+- `backend/model/train_classifier.py`
+- `backend/model/url_only_model.joblib`
+- `backend/model/full_model.joblib`
+- `backend/model/feature_manifest.json`
+
+Runtime behavior:
+
+- The backend uses `model/url_only_model.joblib` by default.
+- The feature order is loaded from `model/feature_manifest.json`.
+- The URL-only model is preferred for `/api/audit` because it does not require server-side crawling, WHOIS, redirects, TLS probing, or Google index checks.
+- If the model or dependencies are missing, the ML block is marked unavailable and rule-based scoring continues.
+
+Important functions/classes:
+
+- `extract_url_only_features(url) -> dict[str, int]`
+- `MLClassifierService.analyze(url) -> dict[str, object]`
+- `ml_classifier_service`
+
+Returned ML shape:
+
+```json
+{
+  "available": true,
+  "score": 87,
+  "probability": 0.87,
+  "threshold": 0.5,
+  "verdict": "phishing-like",
+  "model_path": "model/url_only_model.joblib",
+  "feature_count": 98
+}
+```
+
 ### Risk Scoring
 
-Purpose: Merge URL, page, and reputation scores into one user-facing result.
+Purpose: Merge URL, page, reputation, and optional ML scores into one user-facing result.
 
 Implemented in:
 
@@ -337,7 +386,7 @@ Implemented in:
 
 Important functions:
 
-- `calculate_risk(url_analysis, page_analysis, reputation_analysis) -> dict[str, object]`
+- `calculate_risk(url_analysis, page_analysis, reputation_analysis, ml_analysis=None) -> dict[str, object]`
 - `_risk_level(score) -> str`
 - `_recommendation(score) -> str`
 
@@ -1022,6 +1071,10 @@ If these items appear in planning templates, ignore them for this repository unl
 | `VIRUSTOTAL_SUBMIT_UNKNOWN_URLS` | No | `false` | Whether unknown URLs are submitted to VirusTotal |
 | `DNS_REPUTATION_ENABLED` | No | `true` | Enables DNS reputation checks |
 | `DNS_TIMEOUT_SECONDS` | No | `2` | DNS resolver timeout/lifetime |
+| `ML_CLASSIFIER_ENABLED` | No | `true` | Enables optional Random Forest classifier |
+| `ML_MODEL_PATH` | No | `model/url_only_model.joblib` | Runtime model artifact path from `backend/` |
+| `ML_FEATURE_MANIFEST_PATH` | No | `model/feature_manifest.json` | Feature order manifest path from `backend/` |
+| `ML_PHISHING_THRESHOLD` | No | `0.5` | Probability threshold for phishing-like ML verdict |
 | `CROO_API_KEY` | CROO only | empty | Service owner CROO API key |
 | `CROO_BASE_URL` | CROO only | empty | CROO REST base URL |
 | `CROO_WS_URL` | CROO only | empty | CROO websocket URL |
@@ -1231,7 +1284,7 @@ Keep CROO output as `DeliverableType.SCHEMA`.
 ### Common Pitfalls
 
 - Do not route `/api/audit` through `CrooService` or `CrooProvider.invoke_agent()`. Extension scans should never create CROO orders.
-- Do not claim production AI/ML detection until the ML classifier exists.
+- Keep ML wording precise: the Random Forest classifier is an additional signal, not a replacement for transparent rule scoring.
 - VirusTotal is optional and can be rate-limited; provider errors must not break local deterministic analysis.
 - In-memory caches/rate limits reset on deploy/restart.
 - Render free tier sleeping affects CROO provider availability.
@@ -1246,7 +1299,7 @@ Keep CROO output as `DeliverableType.SCHEMA`.
 - No persistent database.
 - No user accounts or role-based auth.
 - No durable rate limiting across multiple server instances.
-- No production ML classifier yet.
+- The full RF model uses network-dependent features; the runtime path uses the URL-only model by default.
 - No LLM explanation layer yet.
 - WHOIS/domain-age intelligence is not implemented yet.
 - No screenshot visual spoofing yet.

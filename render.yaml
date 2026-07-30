@@ -32,3 +32,11 @@ services:
         value: "true"
       - key: DNS_TIMEOUT_SECONDS
         value: "2"
+      - key: ML_CLASSIFIER_ENABLED
+        value: "true"
+      - key: ML_MODEL_PATH
+        value: model/url_only_model.joblib
+      - key: ML_FEATURE_MANIFEST_PATH
+        value: model/feature_manifest.json
+      - key: ML_PHISHING_THRESHOLD
+        value: "0.5"

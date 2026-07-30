@@ -67,6 +67,10 @@ VIRUSTOTAL_CACHE_TTL_SECONDS=3600
 VIRUSTOTAL_SUBMIT_UNKNOWN_URLS=false
 DNS_REPUTATION_ENABLED=true
 DNS_TIMEOUT_SECONDS=2
+ML_CLASSIFIER_ENABLED=true
+ML_MODEL_PATH=model/url_only_model.joblib
+ML_FEATURE_MANIFEST_PATH=model/feature_manifest.json
+ML_PHISHING_THRESHOLD=0.5
 ```
 
 ⚠️ **Security Warning:** Never commit your `.env` file or expose your API keys publicly. Ensure `.env` is listed inside your root `.gitignore`.
@@ -153,6 +157,17 @@ DNS reputation checks are enabled by default when `dnspython` is installed. They
 DNS_REPUTATION_ENABLED=true
 DNS_TIMEOUT_SECONDS=2
 ```
+
+The Random Forest phishing classifier is optional and non-fatal. By default, the backend loads the URL-only model trained in `backend/model/`:
+
+```
+ML_CLASSIFIER_ENABLED=true
+ML_MODEL_PATH=model/url_only_model.joblib
+ML_FEATURE_MANIFEST_PATH=model/feature_manifest.json
+ML_PHISHING_THRESHOLD=0.5
+```
+
+The URL-only model is used by default because it only needs features that can be computed from the submitted URL. If the model or feature manifest is missing, the backend continues serving deterministic rule-based results and marks the `ml` response block as unavailable.
 
 ---
 

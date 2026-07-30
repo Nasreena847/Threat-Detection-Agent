@@ -7,3 +7,6 @@ httpx
 uvicorn
 croo-sdk
 dnspython
+joblib
+pandas
+scikit-learn
