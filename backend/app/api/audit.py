@@ -89,6 +89,8 @@ def audit(
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
 
     return AuditResponse(
         url=str(result["url"]),
@@ -97,6 +99,7 @@ def audit(
         reasons=[str(reason) for reason in result["reasons"]],
         recommendation=str(result["recommendation"]),
         explanation=str(result["explanation"]),
+        explanation_source=result["explanation_source"] if isinstance(result.get("explanation_source"), dict) else {},
         evidence=[str(reason) for reason in result["reasons"]],
         threat_intel=result["threat_intel"] if isinstance(result.get("threat_intel"), dict) else {},
         ml=result["ml"] if isinstance(result.get("ml"), dict) else {},

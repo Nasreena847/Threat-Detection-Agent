@@ -13,6 +13,7 @@ class AuditResponse(BaseModel):
     reasons: list[str]
     recommendation: str
     explanation: str
+    explanation_source: dict[str, object] = Field(default_factory=dict)
     evidence: list[str] = Field(default_factory=list)
     threat_intel: dict[str, object] = Field(default_factory=dict)
     ml: dict[str, object] = Field(default_factory=dict)

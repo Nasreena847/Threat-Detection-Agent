@@ -34,6 +34,11 @@ class Settings:
     ml_model_path: str = os.getenv("ML_MODEL_PATH", "model/url_only_model.joblib").strip()
     ml_feature_manifest_path: str = os.getenv("ML_FEATURE_MANIFEST_PATH", "model/feature_manifest.json").strip()
     ml_phishing_threshold: float = float(os.getenv("ML_PHISHING_THRESHOLD", "0.5"))
+    llm_explanations_enabled: bool = _env_bool("LLM_EXPLANATIONS_ENABLED", True)
+    deterministic_explanation_fallback_enabled: bool = _env_bool("DETERMINISTIC_EXPLANATION_FALLBACK_ENABLED", True)
+    groq_api_key: str = os.getenv("GROQ_API_KEY", "").strip()
+    groq_model: str = os.getenv("GROQ_MODEL", "gemma2-9b-it").strip()
+    groq_timeout_seconds: float = float(os.getenv("GROQ_TIMEOUT_SECONDS", "4"))
 
 
 settings = Settings()

@@ -38,6 +38,7 @@ Technology stack:
 - Frontend/extension: React, TypeScript, Vite, Tailwind CSS, Framer Motion, TanStack Query, Chrome Manifest V3 APIs.
 - Backend: Python, FastAPI, Pydantic, Uvicorn.
 - Security/reputation: deterministic URL/page rules, DNS reputation checks, optional VirusTotal v3 URL report lookup, optional Random Forest phishing classifier.
+- Explanation layer: Groq-generated natural-language summaries with optional deterministic fallback.
 - CROO: `croo` SDK, `AgentClient`, `EventStream`, schema deliverables.
 - Deployment: Render Web Service via `render.yaml` and `backend/start.sh`.
 
@@ -62,7 +63,7 @@ flowchart TD
     Page --> Risk
     Reputation --> Risk
     ML --> Risk
-    Risk --> Explain[Deterministic explanation]
+    Risk --> Explain[Explanation service]
     Explain --> API
     API --> Popup
 ```
@@ -406,17 +407,21 @@ The engine also boosts the final score when any component is very high, so stron
 
 ### Explanation Generation
 
-Purpose: Produce a deterministic natural-language summary of the evidence and recommendation.
+Purpose: Produce a Groq-generated natural-language summary from the computed evidence, with deterministic fallback when configured.
 
 Implemented in:
 
 - `backend/app/services/explanation.py`
+- `backend/app/services/llm_explanation.py`
 
-Important function:
+Important functions/classes:
 
 - `generate_explanation(risk_result) -> str`
+- `LLMExplanationService.generate(risk_result) -> dict[str, object]`
 
-This is not LLM-generated today. It is template-based and uses the calculated score, level, recommendation, and leading reasons.
+Groq is the primary path when `LLM_EXPLANATIONS_ENABLED=true`. The prompt includes only computed audit data: score, risk level, recommendation, components, threat-intel metadata, ML result, and evidence reasons. The LLM must not change the score or risk level.
+
+If `DETERMINISTIC_EXPLANATION_FALLBACK_ENABLED=true`, failures fall back to the deterministic `generate_explanation()` template. If fallback is disabled, explanation failures return `503` from `/api/audit`.
 
 ### CROO Provider
 
@@ -1075,6 +1080,11 @@ If these items appear in planning templates, ignore them for this repository unl
 | `ML_MODEL_PATH` | No | `model/url_only_model.joblib` | Runtime model artifact path from `backend/` |
 | `ML_FEATURE_MANIFEST_PATH` | No | `model/feature_manifest.json` | Feature order manifest path from `backend/` |
 | `ML_PHISHING_THRESHOLD` | No | `0.5` | Probability threshold for phishing-like ML verdict |
+| `LLM_EXPLANATIONS_ENABLED` | No | `true` | Enables Groq-generated explanations |
+| `DETERMINISTIC_EXPLANATION_FALLBACK_ENABLED` | No | `true` | Allows deterministic fallback if Groq fails |
+| `GROQ_API_KEY` | LLM only | empty | Groq API key |
+| `GROQ_MODEL` | No | `gemma2-9b-it` | Groq model used for explanations |
+| `GROQ_TIMEOUT_SECONDS` | No | `4` | Groq request timeout |
 | `CROO_API_KEY` | CROO only | empty | Service owner CROO API key |
 | `CROO_BASE_URL` | CROO only | empty | CROO REST base URL |
 | `CROO_WS_URL` | CROO only | empty | CROO websocket URL |
@@ -1285,6 +1295,7 @@ Keep CROO output as `DeliverableType.SCHEMA`.
 
 - Do not route `/api/audit` through `CrooService` or `CrooProvider.invoke_agent()`. Extension scans should never create CROO orders.
 - Keep ML wording precise: the Random Forest classifier is an additional signal, not a replacement for transparent rule scoring.
+- Groq explanations must only explain computed evidence; they must not decide or change the risk score.
 - VirusTotal is optional and can be rate-limited; provider errors must not break local deterministic analysis.
 - In-memory caches/rate limits reset on deploy/restart.
 - Render free tier sleeping affects CROO provider availability.
@@ -1300,7 +1311,7 @@ Keep CROO output as `DeliverableType.SCHEMA`.
 - No user accounts or role-based auth.
 - No durable rate limiting across multiple server instances.
 - The full RF model uses network-dependent features; the runtime path uses the URL-only model by default.
-- No LLM explanation layer yet.
+- LLM explanations require `GROQ_API_KEY`; deterministic fallback is optional.
 - WHOIS/domain-age intelligence is not implemented yet.
 - No screenshot visual spoofing yet.
 - Firefox/Edge are not fully packaged/tested.

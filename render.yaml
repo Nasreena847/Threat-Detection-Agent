@@ -40,3 +40,13 @@ services:
         value: model/feature_manifest.json
       - key: ML_PHISHING_THRESHOLD
         value: "0.5"
+      - key: LLM_EXPLANATIONS_ENABLED
+        value: "true"
+      - key: DETERMINISTIC_EXPLANATION_FALLBACK_ENABLED
+        value: "true"
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GROQ_MODEL
+        value: gemma2-9b-it
+      - key: GROQ_TIMEOUT_SECONDS
+        value: "4"

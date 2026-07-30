@@ -71,6 +71,11 @@ ML_CLASSIFIER_ENABLED=true
 ML_MODEL_PATH=model/url_only_model.joblib
 ML_FEATURE_MANIFEST_PATH=model/feature_manifest.json
 ML_PHISHING_THRESHOLD=0.5
+LLM_EXPLANATIONS_ENABLED=true
+DETERMINISTIC_EXPLANATION_FALLBACK_ENABLED=true
+GROQ_API_KEY=
+GROQ_MODEL=gemma2-9b-it
+GROQ_TIMEOUT_SECONDS=4
 ```
 
 ⚠️ **Security Warning:** Never commit your `.env` file or expose your API keys publicly. Ensure `.env` is listed inside your root `.gitignore`.
@@ -168,6 +173,18 @@ ML_PHISHING_THRESHOLD=0.5
 ```
 
 The URL-only model is used by default because it only needs features that can be computed from the submitted URL. If the model or feature manifest is missing, the backend continues serving deterministic rule-based results and marks the `ml` response block as unavailable.
+
+LLM-generated explanations are the primary explanation path. Groq rewrites the final explanation using only the computed audit evidence; it does not change the score, risk level, or underlying recommendation logic:
+
+```
+LLM_EXPLANATIONS_ENABLED=true
+DETERMINISTIC_EXPLANATION_FALLBACK_ENABLED=true
+GROQ_API_KEY=your_groq_key
+GROQ_MODEL=gemma2-9b-it
+GROQ_TIMEOUT_SECONDS=4
+```
+
+If `DETERMINISTIC_EXPLANATION_FALLBACK_ENABLED=true`, the backend falls back to the deterministic explanation when Groq is unavailable, missing, rate-limited, or returns invalid JSON. If it is `false`, `/api/audit` returns `503` when the LLM explanation cannot be generated.
 
 ---
 

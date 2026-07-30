@@ -1,4 +1,4 @@
-from app.services.explanation import generate_explanation
+from app.services.llm_explanation import llm_explanation_service
 from app.services.ml_classifier import ml_classifier_service
 from app.services.page_analyzer import analyze_page
 from app.services.reputation import reputation_service
@@ -33,7 +33,7 @@ def run_audit_pipeline(
     reputation_analysis = reputation_service.analyze(url)
     ml_analysis = ml_classifier_service.analyze(url)
     risk_assessment = calculate_risk(url_analysis, page_analysis, reputation_analysis, ml_analysis)
-    explanation = generate_explanation(risk_assessment)
+    explanation_result = llm_explanation_service.generate(risk_assessment)
     reasons = [str(reason) for reason in risk_assessment["reasons"]]
 
     return {
@@ -41,8 +41,9 @@ def run_audit_pipeline(
         "risk_score": int(risk_assessment["risk_score"]),
         "risk_level": str(risk_assessment["risk_level"]),
         "reasons": reasons,
-        "recommendation": str(risk_assessment["recommendation"]),
-        "explanation": explanation,
+        "recommendation": str(explanation_result["recommendation"]),
+        "explanation": str(explanation_result["explanation"]),
+        "explanation_source": explanation_result,
         "components": risk_assessment.get("components", {}),
         "threat_intel": risk_assessment.get("threat_intel", {}),
         "ml": risk_assessment.get("ml", {}),
