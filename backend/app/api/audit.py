@@ -1,3 +1,4 @@
+import logging
 import threading
 import time
 from collections import defaultdict, deque
@@ -7,10 +8,12 @@ from fastapi import APIRouter, Header, HTTPException, Request, status
 
 from app.config import settings
 from app.schemas.request import AuditRequest
-from app.schemas.response import AuditResponse, CrooAuditResponse
+from app.schemas.response import AuditResponse, CrooAuditResponse, ScanHistoryItem, ScanHistoryResponse
 from app.services.audit_pipeline import run_audit_pipeline
+from app.services.scan_history import scan_history_store
 
 router = APIRouter(prefix="/api/audit", tags=["Audit"])
+logger = logging.getLogger(__name__)
 RATE_LIMIT_WINDOW_SECONDS = 60
 _rate_limit_lock = threading.Lock()
 _rate_limit_buckets: dict[str, Deque[float]] = defaultdict(deque)
@@ -92,7 +95,14 @@ def audit(
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
 
+    scan_id = None
+    try:
+        scan_id = scan_history_store.save(result)
+    except Exception:
+        logger.exception("Failed to save audit scan history")
+
     return AuditResponse(
+        scan_id=scan_id,
         url=str(result["url"]),
         risk_score=int(result["risk_score"]),
         risk_level=str(result["risk_level"]),
@@ -105,3 +115,23 @@ def audit(
         ml=result["ml"] if isinstance(result.get("ml"), dict) else {},
         croo=CrooAuditResponse(agent_used=False, response=None),
     )
+
+
+@router.get("/history", response_model=ScanHistoryResponse)
+def audit_history(limit: int = 50, domain: str | None = None) -> ScanHistoryResponse:
+    scans = scan_history_store.list_recent(limit=limit, domain=domain)
+    return ScanHistoryResponse(scans=[ScanHistoryItem(**scan) for scan in scans])
+
+
+@router.get("/history/{scan_id}", response_model=ScanHistoryItem)
+def audit_history_item(scan_id: int) -> ScanHistoryItem:
+    scan = scan_history_store.get(scan_id)
+    if scan is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scan history item not found.")
+
+    return ScanHistoryItem(**scan)
+
+
+@router.delete("/history", response_model=dict[str, int])
+def clear_audit_history() -> dict[str, int]:
+    return {"deleted": scan_history_store.clear()}

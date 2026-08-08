@@ -10,6 +10,12 @@ def _reasons(result: AnalysisResult) -> list[str]:
     return [str(reason) for reason in reasons] if isinstance(reasons, list) else []
 
 
+def _has_trusted_reputation(reputation_analysis: AnalysisResult) -> bool:
+    return _score(reputation_analysis) == 0 and any(
+        "reputation appears trusted" in reason.lower() for reason in _reasons(reputation_analysis)
+    )
+
+
 def _risk_level(score: int) -> str:
     if score <= 25:
         return "Safe"
@@ -39,7 +45,8 @@ def calculate_risk(
     reputation_score = _score(reputation_analysis)
     ml_available = bool((ml_analysis or {}).get("available"))
     ml_score = _score(ml_analysis or {}) if ml_available else 0
-    max_component = max(url_score, page_score, reputation_score, ml_score)
+    ml_has_rule_support = url_score >= 18 or page_score >= 18 or reputation_score >= 20
+    max_component = max(url_score, page_score, reputation_score, ml_score if ml_has_rule_support else 0)
     weighted_score = round(
         (url_score * 0.38)
         + (page_score * 0.47)
@@ -58,17 +65,25 @@ def calculate_risk(
     elif url_score >= 18 and page_score >= 18:
         weighted_score += 6
 
-    if ml_available and ml_score >= 50:
+    if ml_available and ml_score >= 50 and ml_has_rule_support:
         weighted_score = max(weighted_score, round((weighted_score * 0.72) + (ml_score * 0.28)))
-    if ml_available and ml_score >= 80:
+    if ml_available and ml_score >= 80 and ml_has_rule_support:
         weighted_score = max(weighted_score, round(ml_score * 0.78))
 
+    if _has_trusted_reputation(reputation_analysis) and url_score <= 10:
+        weighted_score = min(weighted_score, 35 if page_score > 20 else 25)
+
     risk_score = max(0, min(weighted_score, 100))
+    ml_reasons = _reasons(ml_analysis or {}) if ml_available else []
+    if ml_available and ml_score >= 50 and not ml_has_rule_support:
+        ml_reasons = [
+            "ML classifier produced an elevated phishing estimate, but the score was not raised because rule-based and reputation signals did not corroborate it."
+        ]
     reasons = (
         _reasons(url_analysis)
         + _reasons(page_analysis)
         + _reasons(reputation_analysis)
-        + (_reasons(ml_analysis or {}) if ml_available else [])
+        + ml_reasons
     )
 
     return {

@@ -39,6 +39,9 @@ class Settings:
     groq_api_key: str = os.getenv("GROQ_API_KEY", "").strip()
     groq_model: str = os.getenv("GROQ_MODEL", "gemma2-9b-it").strip()
     groq_timeout_seconds: float = float(os.getenv("GROQ_TIMEOUT_SECONDS", "4"))
+    scan_history_enabled: bool = _env_bool("SCAN_HISTORY_ENABLED", True)
+    scan_history_db_path: str = os.getenv("SCAN_HISTORY_DB_PATH", "data/scan_history.sqlite3").strip()
+    scan_history_retention_limit: int = int(os.getenv("SCAN_HISTORY_RETENTION_LIMIT", "500"))
 
 
 settings = Settings()

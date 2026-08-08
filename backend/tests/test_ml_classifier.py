@@ -59,7 +59,7 @@ class MLClassifierTests(unittest.TestCase):
         self.assertFalse(result["available"])
         self.assertEqual(result["score"], 0)
 
-    def test_risk_engine_uses_available_high_ml_score_as_additional_signal(self) -> None:
+    def test_risk_engine_does_not_let_ml_alone_force_high_risk(self) -> None:
         result = calculate_risk(
             {"score": 0, "reasons": []},
             {"score": 0, "reasons": []},
@@ -67,9 +67,32 @@ class MLClassifierTests(unittest.TestCase):
             {"score": 90, "reasons": ["ML signal"], "available": True},
         )
 
+        self.assertLessEqual(result["risk_score"], 25)
+        self.assertEqual(result["components"]["ml"], 90)
+        self.assertIn("not raised", " ".join(result["reasons"]))
+
+    def test_risk_engine_uses_high_ml_score_when_rule_signals_corroborate_it(self) -> None:
+        result = calculate_risk(
+            {"score": 35, "reasons": ["Suspicious URL"]},
+            {"score": 30, "reasons": ["Suspicious page"]},
+            {"score": 8, "reasons": []},
+            {"score": 90, "reasons": ["ML signal"], "available": True},
+        )
+
         self.assertGreaterEqual(result["risk_score"], 70)
         self.assertEqual(result["components"]["ml"], 90)
         self.assertIn("ML signal", result["reasons"])
+
+    def test_risk_engine_caps_clean_trusted_domain_even_with_high_ml_score(self) -> None:
+        result = calculate_risk(
+            {"score": 0, "reasons": []},
+            {"score": 0, "reasons": []},
+            {"score": 0, "reasons": ["Domain reputation appears trusted for github.com."]},
+            {"score": 95, "reasons": ["ML signal"], "available": True},
+        )
+
+        self.assertLessEqual(result["risk_score"], 25)
+        self.assertEqual(result["risk_level"], "Safe")
 
 
 if __name__ == "__main__":

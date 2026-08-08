@@ -7,6 +7,7 @@ class CrooAuditResponse(BaseModel):
 
 
 class AuditResponse(BaseModel):
+    scan_id: int | None = None
     url: str
     risk_score: int = Field(..., ge=0, le=100)
     risk_level: str
@@ -35,3 +36,18 @@ class CrooInvokeResponse(BaseModel):
     agent_id: str
     invoked: bool
     response: dict[str, object]
+
+
+class ScanHistoryItem(BaseModel):
+    id: int
+    created_at: str
+    url: str
+    domain: str
+    risk_score: int = Field(..., ge=0, le=100)
+    risk_level: str
+    explanation_source: str
+    report: dict[str, object]
+
+
+class ScanHistoryResponse(BaseModel):
+    scans: list[ScanHistoryItem]

@@ -76,6 +76,9 @@ DETERMINISTIC_EXPLANATION_FALLBACK_ENABLED=true
 GROQ_API_KEY=
 GROQ_MODEL=gemma2-9b-it
 GROQ_TIMEOUT_SECONDS=4
+SCAN_HISTORY_ENABLED=true
+SCAN_HISTORY_DB_PATH=data/scan_history.sqlite3
+SCAN_HISTORY_RETENTION_LIMIT=500
 ```
 
 ⚠️ **Security Warning:** Never commit your `.env` file or expose your API keys publicly. Ensure `.env` is listed inside your root `.gitignore`.
@@ -186,6 +189,16 @@ GROQ_TIMEOUT_SECONDS=4
 
 If `DETERMINISTIC_EXPLANATION_FALLBACK_ENABLED=true`, the backend falls back to the deterministic explanation when Groq is unavailable, missing, rate-limited, or returns invalid JSON. If it is `false`, `/api/audit` returns `503` when the LLM explanation cannot be generated.
 
+Scan history is stored in a local SQLite database by default. Each successful `/api/audit` response includes a `scan_id`, and the full normalized report can be listed or fetched later:
+
+```
+SCAN_HISTORY_ENABLED=true
+SCAN_HISTORY_DB_PATH=data/scan_history.sqlite3
+SCAN_HISTORY_RETENTION_LIMIT=500
+```
+
+The database is intentionally lightweight and local to the running backend process. On Render free services, this storage should be treated as temporary because the filesystem can be reset across deploys.
+
 ---
 
 ## 🔍 Verifying the API Setup
@@ -197,3 +210,6 @@ Once your server is running, navigate to `http://127.0.0.1:8000/docs` to test th
 | `GET` | `/` | Health status check |
 | `GET` | `/health` | Render/uptime health check with CROO provider status |
 | `POST` | `/api/audit` | Synchronous URL metadata assessment endpoint |
+| `GET` | `/api/audit/history` | List recent saved scan reports |
+| `GET` | `/api/audit/history/{scan_id}` | Fetch one saved scan report |
+| `DELETE` | `/api/audit/history` | Clear local scan history |

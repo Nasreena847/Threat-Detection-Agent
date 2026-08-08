@@ -123,12 +123,14 @@ Threat-Detection-Agent/
 │   │       ├── reputation.py
 │   │       ├── risk_engine.py
 │   │       ├── explanation.py
+│   │       ├── scan_history.py
 │   │       ├── croo_provider.py
 │   │       ├── croo_service.py
 │   │       ├── croo_services.py
 │   │       └── test_requester.py
 │   └── tests/
 │       ├── test_croo_service.py
+│       ├── test_scan_history.py
 │       ├── test_ml_classifier.py
 │       ├── test_reputation.py
 │       └── test_security_controls.py
@@ -223,8 +225,17 @@ The route:
 - optionally checks `AUDIT_API_KEY`;
 - applies in-memory per-client rate limiting;
 - calls `run_audit_pipeline()`;
+- saves successful reports to `scan_history_store`;
 - converts `ValueError` validation failures into HTTP `400`;
 - returns the same JSON shape expected by the extension.
+
+History endpoints:
+
+```text
+GET /api/audit/history
+GET /api/audit/history/{scan_id}
+DELETE /api/audit/history
+```
 
 ### Rule-Based URL Analysis
 
@@ -471,6 +482,7 @@ Responsibilities:
 - create FastAPI app;
 - install CORS middleware;
 - mount audit router;
+- initialize SQLite scan history at startup;
 - start `CrooProvider` at app startup if configured;
 - stop `CrooProvider` at app shutdown;
 - expose `/` and `/health`.
@@ -478,10 +490,10 @@ Responsibilities:
 Functions:
 
 - `_log_croo_start_result(task)`: logs/prints background startup result.
-- `start_croo_provider()`: FastAPI startup hook; schedules `croo_provider.start()`.
-- `stop_croo_provider()`: FastAPI shutdown hook; stops provider and cancels startup task if needed.
+- `start_services()`: FastAPI startup hook; initializes scan history and schedules `croo_provider.start()`.
+- `stop_services()`: FastAPI shutdown hook; stops provider and cancels startup task if needed.
 - `root()`: returns `{"status": "running"}`.
-- `health()`: returns `status`, `croo_provider_configured`, and `croo_provider_started`.
+- `health()`: returns `status`, `croo_provider_configured`, `croo_provider_started`, and `scan_history_enabled`.
 
 ### `backend/app/config.py`
 
@@ -499,15 +511,31 @@ Settings:
 - `VIRUSTOTAL_TIMEOUT_SECONDS`
 - `VIRUSTOTAL_CACHE_TTL_SECONDS`
 - `VIRUSTOTAL_SUBMIT_UNKNOWN_URLS`
+- `DNS_REPUTATION_ENABLED`
+- `DNS_TIMEOUT_SECONDS`
+- `ML_CLASSIFIER_ENABLED`
+- `ML_MODEL_PATH`
+- `ML_FEATURE_MANIFEST_PATH`
+- `ML_PHISHING_THRESHOLD`
+- `LLM_EXPLANATIONS_ENABLED`
+- `DETERMINISTIC_EXPLANATION_FALLBACK_ENABLED`
+- `GROQ_API_KEY`
+- `GROQ_MODEL`
+- `GROQ_TIMEOUT_SECONDS`
+- `SCAN_HISTORY_ENABLED`
+- `SCAN_HISTORY_DB_PATH`
+- `SCAN_HISTORY_RETENTION_LIMIT`
 
 ### `backend/app/api/audit.py`
 
 Responsibilities:
 
 - define `/api/audit`;
+- define `/api/audit/history` routes;
 - enforce optional API key;
 - enforce rate limiting;
 - call audit pipeline;
+- save successful audit reports;
 - return `AuditResponse`.
 
 Important helpers:
@@ -516,6 +544,9 @@ Important helpers:
 - `_enforce_rate_limit(http_request)`: sliding-window in-memory limiter.
 - `_enforce_audit_api_key(x_trusttab_api_key, x_api_key)`: checks optional API key.
 - `audit(request, http_request, x_trusttab_api_key, x_api_key)`: endpoint function.
+- `audit_history(limit, domain)`: lists saved scans, optionally filtered by domain.
+- `audit_history_item(scan_id)`: returns one saved scan or `404`.
+- `clear_audit_history()`: deletes local scan history.
 
 Inputs:
 
@@ -558,9 +589,12 @@ Pydantic response models:
 - `CrooAgent`
 - `CrooAgentsResponse`
 - `CrooInvokeResponse`
+- `ScanHistoryItem`
+- `ScanHistoryResponse`
 
 `AuditResponse` fields:
 
+- `scan_id`
 - `url`
 - `risk_score`
 - `risk_level`
@@ -569,6 +603,7 @@ Pydantic response models:
 - `explanation`
 - `evidence`
 - `threat_intel`
+- `ml`
 - `croo`
 
 ### `backend/app/services/audit_pipeline.py`
@@ -679,6 +714,20 @@ Consumes analyzer outputs and returns:
 ### `backend/app/services/explanation.py`
 
 Creates deterministic, plain-language explanation text from the risk result.
+
+### `backend/app/services/scan_history.py`
+
+Small SQLite persistence layer for local scan history.
+
+Important functions and methods:
+
+- `ScanHistoryStore.initialize()`: creates the `scan_history` table and indexes.
+- `ScanHistoryStore.save(report) -> int | None`: stores a completed audit report and returns the new scan id.
+- `ScanHistoryStore.list_recent(limit, domain) -> list[dict[str, object]]`: returns the most recent scans, optionally filtered by normalized domain.
+- `ScanHistoryStore.get(scan_id) -> dict[str, object] | None`: returns a single saved scan.
+- `ScanHistoryStore.clear() -> int`: deletes saved scan records.
+
+The module exposes a singleton `scan_history_store` configured from `SCAN_HISTORY_*` environment variables. It uses only Python stdlib `sqlite3`, so no ORM or migration framework is required.
 
 ### `backend/app/services/croo_provider.py`
 
@@ -1012,28 +1061,51 @@ Limitations:
 
 ## Database
 
-There is currently no database.
+The backend includes a lightweight SQLite database for scan history.
 
-No implemented:
+Implemented schema:
 
-- schema migrations
-- ORM models
-- DocTypes
-- relationships
-- persisted audit history
-- user accounts
-- saved settings
-- certificates or progress tables
+```sql
+CREATE TABLE scan_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    created_at TEXT NOT NULL,
+    url TEXT NOT NULL,
+    domain TEXT NOT NULL,
+    risk_score INTEGER NOT NULL,
+    risk_level TEXT NOT NULL,
+    explanation_source TEXT NOT NULL,
+    report_json TEXT NOT NULL
+);
+```
+
+Indexes:
+
+- `idx_scan_history_created_at`
+- `idx_scan_history_domain`
+
+Data flow:
+
+1. `/api/audit` runs `run_audit_pipeline()`.
+2. `audit()` passes the completed report dictionary to `scan_history_store.save()`.
+3. `ScanHistoryStore` stores summary columns plus the full report JSON.
+4. The response includes `scan_id`.
+5. History endpoints read the same SQLite table.
+
+Retention:
+
+- `SCAN_HISTORY_RETENTION_LIMIT` controls how many newest scans are kept.
+- Pruning happens after each save.
+- `SCAN_HISTORY_ENABLED=false` disables storage and returns `scan_id=null`.
 
 Current storage:
 
 - Backend: in-memory rate-limit buckets and VirusTotal cache.
+- Backend: SQLite scan history at `SCAN_HISTORY_DB_PATH`.
 - Extension: `localStorage` cache for audit reports by domain.
 - Chrome extension: `chrome.storage.local` stores `trusttabInstalledAt`.
 
 Future database candidates:
 
-- audit history table
 - threat-intel cache table
 - domain reputation snapshot table
 - user/team table
@@ -1085,6 +1157,9 @@ If these items appear in planning templates, ignore them for this repository unl
 | `GROQ_API_KEY` | LLM only | empty | Groq API key |
 | `GROQ_MODEL` | No | `gemma2-9b-it` | Groq model used for explanations |
 | `GROQ_TIMEOUT_SECONDS` | No | `4` | Groq request timeout |
+| `SCAN_HISTORY_ENABLED` | No | `true` | Enables local SQLite scan-history storage |
+| `SCAN_HISTORY_DB_PATH` | No | `data/scan_history.sqlite3` | SQLite database path from `backend/` |
+| `SCAN_HISTORY_RETENTION_LIMIT` | No | `500` | Newest scan records to keep |
 | `CROO_API_KEY` | CROO only | empty | Service owner CROO API key |
 | `CROO_BASE_URL` | CROO only | empty | CROO REST base URL |
 | `CROO_WS_URL` | CROO only | empty | CROO websocket URL |
