@@ -21,7 +21,7 @@ export type AuditRecommendation =
   | string
 
 export type AuditReport = {
-  scanId?: number
+  scanId?: number | null
   score: number
   verdict: AuditVerdict
   summary: string
@@ -29,6 +29,20 @@ export type AuditReport = {
   reasons: string[]
   evidence: AuditEvidence[]
   website?: Partial<WebsiteInfo>
+  components?: Record<string, unknown>
+  threatIntel?: Record<string, unknown>
+  ml?: Record<string, unknown>
+  explanationSource?: Record<string, unknown>
+}
+
+export type AuditHistoryEntry = {
+  id?: number
+  domain: string
+  url: string
+  score: number
+  verdict: AuditVerdict
+  timestamp: string
+  summary: string
 }
 
 export type AuditRequest = {

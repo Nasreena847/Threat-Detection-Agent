@@ -16,6 +16,7 @@ type ChromeSendResponse = (response?: unknown) => void
 
 declare const chrome: {
   runtime: {
+    getURL(path: string): string
     onInstalled: {
       addListener(callback: () => void): void
     }
@@ -37,5 +38,6 @@ declare const chrome: {
   tabs: {
     query(queryInfo: ChromeQueryInfo): Promise<ChromeTab[]>
     sendMessage(tabId: number, message: unknown): Promise<unknown>
+    create(createProperties: { url: string }): Promise<ChromeTab>
   }
 }

@@ -30,7 +30,7 @@ export default function ErrorCard({ message, onRetry, showLocalSetup = false }: 
               <p className="text-xs font-semibold text-white">Free-tier API unavailable?</p>
               <p className="mt-1 text-xs leading-5 text-red-100/70">
                 Start the FastAPI backend locally, then keep this extension pointed to
-                http://localhost:8000/api/audit.
+                http://127.0.0.1:8000/api/audit.
               </p>
               <div className="mt-2 space-y-1">
                 {localSetupCommands.map((command) => (

@@ -16,12 +16,15 @@ except ModuleNotFoundError:  # DNS reputation is optional in lean local environm
     dns = None
 
 KNOWN_TRUSTED_DOMAINS = {
-    "google.com",
-    "github.com",
-    "microsoft.com",
-    "apple.com",
     "amazon.com",
+    "apple.com",
     "cloudflare.com",
+    "github.com",
+    "google.com",
+    "leetcode.com",
+    "microsoft.com",
+    "openai.com",
+    "stackoverflow.com",
     "wikipedia.org",
 }
 

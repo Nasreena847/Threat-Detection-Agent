@@ -1,19 +1,22 @@
 import { AnimatePresence, motion } from 'framer-motion'
+import { useQuery } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 import AnalysisTimeline from '../components/AnalysisTimeline'
+import DetailsDropdown from '../components/DetailsDropdown'
 import ErrorCard from '../components/ErrorCard'
-import EvidenceList from '../components/EvidenceList'
 import Footer from '../components/Footer'
 import Header from '../components/Header'
 import LoadingScreen from '../components/LoadingScreen'
 import RecommendationCard from '../components/RecommendationCard'
 import RiskMeter from '../components/RiskMeter'
+import ScanHistory from '../components/ScanHistory'
 import SecurityScore from '../components/SecurityScore'
 import SettingsModal from '../components/SettingsModal'
 import SummaryCard from '../components/SummaryCard'
 import WebsiteCard from '../components/WebsiteCard'
 import { useAudit } from '../hooks/useAudit'
 import { useCurrentTab } from '../hooks/useCurrentTab'
+import { fetchAuditHistory, readAuditHistory } from '../services/api'
 
 export default function Popup() {
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -24,6 +27,13 @@ export default function Popup() {
   const website = currentTab.data
   const auditQuery = useAudit(website, autoScan || manualScanRequested)
   const audit = auditQuery.audit
+  const historyQuery = useQuery({
+    queryKey: ['audit-history', audit?.scanId, audit?.score, audit?.summary],
+    queryFn: () => fetchAuditHistory(6),
+    initialData: readAuditHistory,
+    staleTime: 15_000,
+  })
+  const history = historyQuery.data
   const isLoading = currentTab.isLoading || auditQuery.isLoading
   const errorMessage =
     currentTab.error instanceof Error
@@ -36,6 +46,7 @@ export default function Popup() {
     setManualScanRequested(true)
     void currentTab.refetch()
     void auditQuery.refresh()
+    void historyQuery.refetch()
   }
 
   const handleAutoScanChange = (checked: boolean) => {
@@ -96,8 +107,13 @@ export default function Popup() {
                   <>
                     <SecurityScore score={audit.score} verdict={audit.verdict} />
                     <RiskMeter score={audit.score} />
+                    <ScanHistory history={history} limit={5} />
                     <SummaryCard summary={audit.summary} />
-                    {detailsExpanded ? <EvidenceList evidence={audit.evidence} /> : null}
+                    <DetailsDropdown
+                      audit={audit}
+                      expanded={detailsExpanded}
+                      onToggle={() => setDetailsExpanded((expanded) => !expanded)}
+                    />
                     <RecommendationCard
                       recommendation={audit.recommendation}
                       verdict={audit.verdict}
@@ -130,3 +146,4 @@ export default function Popup() {
     </main>
   )
 }
+

@@ -98,7 +98,9 @@ export async function getCurrentTab(): Promise<WebsiteInfo> {
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     if (message.includes('Receiving end does not exist')) {
-      throw new Error('Content script is not loaded on this page. Please refresh the page.')
+      throw new Error('Content script is not loaded on this page. Please refresh the page.', {
+        cause: error,
+      })
     }
     throw error
   }

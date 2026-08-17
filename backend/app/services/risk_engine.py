@@ -11,7 +11,7 @@ def _reasons(result: AnalysisResult) -> list[str]:
 
 
 def _has_trusted_reputation(reputation_analysis: AnalysisResult) -> bool:
-    return _score(reputation_analysis) == 0 and any(
+    return any(
         "reputation appears trusted" in reason.lower() for reason in _reasons(reputation_analysis)
     )
 
@@ -43,9 +43,14 @@ def calculate_risk(
     url_score = _score(url_analysis)
     page_score = _score(page_analysis)
     reputation_score = _score(reputation_analysis)
+    trusted_reputation = _has_trusted_reputation(reputation_analysis)
     ml_available = bool((ml_analysis or {}).get("available"))
     ml_score = _score(ml_analysis or {}) if ml_available else 0
     ml_has_rule_support = url_score >= 18 or page_score >= 18 or reputation_score >= 20
+    if trusted_reputation and url_score <= 10 and reputation_score <= 10 and page_score < 50:
+        ml_has_rule_support = False
+    elif url_score <= 10 and reputation_score <= 10 and page_score < 25:
+        ml_has_rule_support = False
     max_component = max(url_score, page_score, reputation_score, ml_score if ml_has_rule_support else 0)
     weighted_score = round(
         (url_score * 0.38)
@@ -70,8 +75,13 @@ def calculate_risk(
     if ml_available and ml_score >= 80 and ml_has_rule_support:
         weighted_score = max(weighted_score, round(ml_score * 0.78))
 
-    if _has_trusted_reputation(reputation_analysis) and url_score <= 10:
-        weighted_score = min(weighted_score, 35 if page_score > 20 else 25)
+    if trusted_reputation and url_score <= 10 and reputation_score <= 10:
+        if page_score < 25:
+            weighted_score = min(weighted_score, 12)
+        elif page_score < 50:
+            weighted_score = min(weighted_score, 24)
+        elif page_score < 70:
+            weighted_score = min(weighted_score, 38)
 
     risk_score = max(0, min(weighted_score, 100))
     ml_reasons = _reasons(ml_analysis or {}) if ml_available else []

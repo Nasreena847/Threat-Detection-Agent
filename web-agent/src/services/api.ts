@@ -1,8 +1,17 @@
-import type { AuditEvidence, AuditReport, AuditRequest, EvidenceStatus } from '../types/audit'
+import type {
+  AuditEvidence,
+  AuditHistoryEntry,
+  AuditReport,
+  AuditRequest,
+  EvidenceStatus,
+} from '../types/audit'
 import { clampScore, getRecommendation, getVerdict } from '../utils/score'
 
-const API_URL = 'http://localhost:8000/api/audit'
+const API_URL = 'http://127.0.0.1:8000/api/audit'
 const LOCAL_BACKEND_URL = 'http://127.0.0.1:8000'
+const CACHE_VERSION = 'v2'
+const HISTORY_STORAGE_KEY = `trusttab:audit:${CACHE_VERSION}:history`
+const MAX_HISTORY_ITEMS = 8
 
 type BackendEvidence = {
   id?: unknown
@@ -25,6 +34,14 @@ type BackendAuditResponse = {
   verdict?: unknown
   summary?: unknown
   website?: unknown
+  components?: unknown
+  threat_intel?: unknown
+  ml?: unknown
+  explanation_source?: unknown
+}
+
+type BackendHistoryResponse = {
+  scans?: unknown
 }
 
 const isEvidenceStatus = (value: unknown): value is EvidenceStatus =>
@@ -103,7 +120,7 @@ const buildEvidence = (value: unknown, reasons: string[]): AuditEvidence[] => {
 }
 
 const readCachedAudit = (domain: string): AuditReport | null => {
-  const raw = window.localStorage.getItem(`trusttab:audit:${domain}`)
+  const raw = window.localStorage.getItem(`trusttab:audit:${CACHE_VERSION}:${domain}`)
   if (!raw) return null
 
   try {
@@ -113,8 +130,89 @@ const readCachedAudit = (domain: string): AuditReport | null => {
   }
 }
 
+export const readAuditHistory = (): AuditHistoryEntry[] => {
+  if (typeof window === 'undefined') return []
+
+  const raw = window.localStorage.getItem(HISTORY_STORAGE_KEY)
+  if (!raw) return []
+
+  try {
+    const parsed = JSON.parse(raw) as AuditHistoryEntry[]
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
 const writeCachedAudit = (domain: string, report: AuditReport) => {
-  window.localStorage.setItem(`trusttab:audit:${domain}`, JSON.stringify(report))
+  window.localStorage.setItem(`trusttab:audit:${CACHE_VERSION}:${domain}`, JSON.stringify(report))
+}
+
+const writeAuditHistory = (payload: AuditRequest, report: AuditReport) => {
+  if (typeof window === 'undefined') return
+
+  const entry: AuditHistoryEntry = {
+    domain: payload.domain ?? payload.url,
+    url: payload.url,
+    score: report.score,
+    verdict: report.verdict,
+    timestamp: new Date().toISOString(),
+    summary: report.summary,
+  }
+
+  const existing = readAuditHistory().filter((item) => item.url !== payload.url)
+  const nextHistory = [entry, ...existing].slice(0, MAX_HISTORY_ITEMS)
+  window.localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(nextHistory))
+}
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null
+
+const domainFromUrl = (url: string) => {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '')
+  } catch {
+    return url
+  }
+}
+
+const normalizeHistoryItem = (item: unknown): AuditHistoryEntry | null => {
+  if (!isRecord(item)) return null
+
+  const report = isRecord(item.report) ? item.report : {}
+  const score = clampScore(item.risk_score ?? report.risk_score ?? report.score)
+  const verdict = normalizeVerdict(item.risk_level ?? report.risk_level ?? report.verdict, score)
+  const url = String(item.url ?? report.url ?? '')
+
+  if (!url) return null
+
+  return {
+    id: typeof item.id === 'number' ? item.id : undefined,
+    domain: String(item.domain ?? domainFromUrl(url)),
+    url,
+    score,
+    verdict,
+    timestamp: String(item.created_at ?? new Date().toISOString()),
+    summary: String(report.explanation ?? report.summary ?? 'Scan completed.'),
+  }
+}
+
+export async function fetchAuditHistory(limit = 8): Promise<AuditHistoryEntry[]> {
+  try {
+    const response = await fetch(`${API_URL}/history?limit=${limit}`)
+    if (!response.ok) return readAuditHistory()
+
+    const data = (await response.json()) as BackendHistoryResponse
+    if (!Array.isArray(data.scans)) return readAuditHistory()
+
+    const history = data.scans
+      .map((item) => normalizeHistoryItem(item))
+      .filter((item): item is AuditHistoryEntry => item !== null)
+
+    return history.length > 0 ? history : readAuditHistory()
+  } catch {
+    return readAuditHistory()
+  }
 }
 
 export async function auditWebsite(payload: AuditRequest): Promise<AuditReport> {
@@ -132,7 +230,7 @@ export async function auditWebsite(payload: AuditRequest): Promise<AuditReport> 
     const cached = readCachedAudit(payload.domain)
     if (cached) return cached
     throw new Error(
-      `The audit API is not reachable. The hosted free-tier backend may be unavailable. Run the backend locally at ${LOCAL_BACKEND_URL} and retry.`,
+      `The local audit API is unreachable. Start the backend at ${LOCAL_BACKEND_URL} and retry.`,
     )
   }
 
@@ -140,7 +238,7 @@ export async function auditWebsite(payload: AuditRequest): Promise<AuditReport> 
     const cached = readCachedAudit(payload.domain)
     if (cached) return cached
     throw new Error(
-      `Audit service returned ${response.status}. If the hosted free-tier backend is unavailable, run the backend locally at ${LOCAL_BACKEND_URL}.`,
+      `Audit service returned ${response.status}. Start the backend at ${LOCAL_BACKEND_URL} and retry.`,
     )
   }
 
@@ -167,8 +265,14 @@ export async function auditWebsite(payload: AuditRequest): Promise<AuditReport> 
     reasons,
     evidence,
     website: data.website && typeof data.website === 'object' ? data.website : undefined,
+    components: isRecord(data.components) ? data.components : undefined,
+    threatIntel: isRecord(data.threat_intel) ? data.threat_intel : undefined,
+    ml: isRecord(data.ml) ? data.ml : undefined,
+    explanationSource: isRecord(data.explanation_source) ? data.explanation_source : undefined,
   }
 
   writeCachedAudit(payload.domain, report)
+  writeAuditHistory(payload, report)
   return report
 }
+

@@ -1,90 +1,73 @@
 import ipaddress
 import math
-import math
 from urllib.parse import urlparse
 
 import tldextract
 
 try:
     import validators
-except ModuleNotFoundError:  # Allows the MVP to run in lean local environments.
+except ModuleNotFoundError:  # Allows the app to run when the optional package is absent globally.
     validators = None
 
 SUSPICIOUS_KEYWORDS = {
-    "login",
-    "verify",
-    "update",
-    "secure",
     "account",
     "banking",
-    "password",
-    "wallet",
+    "confirm",
     "crypto",
-    "payment",
     "invoice",
+    "login",
+    "password",
+    "payment",
+    "secure",
     "support",
     "unlock",
-    "confirm",
+    "update",
+    "verify",
+    "wallet",
 }
 
 URL_SHORTENERS = {
     "bit.ly",
-    "tinyurl.com",
-    "goo.gl",
-    "ow.ly",
-    "t.co",
-    "is.gd",
     "buff.ly",
     "cutt.ly",
+    "goo.gl",
+    "is.gd",
+    "ow.ly",
     "rebrand.ly",
     "shorturl.at",
+    "t.co",
+    "tinyurl.com",
 }
 
 SUSPICIOUS_TLDS = {
-    "zip",
-    "mov",
-    "top",
-    "xyz",
     "click",
-    "link",
-    "work",
-    "quest",
     "country",
-    "stream",
     "gq",
+    "link",
+    "mov",
+    "quest",
+    "stream",
     "tk",
+    "top",
+    "work",
+    "xyz",
+    "zip",
 }
 
 BRAND_DOMAINS = {
-    "paypal": {"paypal.com"},
-    "google": {"google.com"},
-    "microsoft": {"microsoft.com", "live.com", "office.com", "outlook.com"},
-    "apple": {"apple.com"},
     "amazon": {"amazon.com"},
-    "facebook": {"facebook.com", "meta.com"},
-    "instagram": {"instagram.com"},
-    "netflix": {"netflix.com"},
+    "apple": {"apple.com"},
     "binance": {"binance.com"},
     "coinbase": {"coinbase.com"},
-    "github": {"github.com"},
     "docusign": {"docusign.com"},
     "dropbox": {"dropbox.com"},
-}
-
-BRAND_DOMAINS = {
-    "paypal": {"paypal.com"},
-    "google": {"google.com"},
-    "microsoft": {"microsoft.com", "live.com", "office.com", "outlook.com"},
-    "apple": {"apple.com"},
-    "amazon": {"amazon.com"},
     "facebook": {"facebook.com", "meta.com"},
-    "instagram": {"instagram.com"},
-    "netflix": {"netflix.com"},
-    "binance": {"binance.com"},
-    "coinbase": {"coinbase.com"},
     "github": {"github.com"},
-    "docusign": {"docusign.com"},
-    "dropbox": {"dropbox.com"},
+    "google": {"google.com"},
+    "instagram": {"instagram.com"},
+    "microsoft": {"live.com", "microsoft.com", "office.com", "outlook.com"},
+    "netflix": {"netflix.com"},
+    "paypal": {"paypal.com"},
 }
 
 MAX_SCORE = 100
@@ -92,14 +75,8 @@ LONG_URL_THRESHOLD = 120
 LONG_PATH_THRESHOLD = 70
 SUBDOMAIN_THRESHOLD = 3
 QUERY_PARAM_THRESHOLD = 6
-BLOCKED_HOSTNAMES = {
-    "localhost",
-    "metadata",
-    "metadata.google.internal",
-}
-BLOCKED_METADATA_IPS = {
-    ipaddress.ip_address("169.254.169.254"),
-}
+BLOCKED_HOSTNAMES = {"localhost", "metadata", "metadata.google.internal"}
+BLOCKED_METADATA_IPS = {ipaddress.ip_address("169.254.169.254")}
 extract_domain = tldextract.TLDExtract(suffix_list_urls=(), cache_dir=None)
 
 
@@ -107,12 +84,12 @@ def _clamp_score(score: int) -> int:
     return max(0, min(score, MAX_SCORE))
 
 
-def _is_ip_hostname(hostname: str) -> bool:
-    try:
-        ipaddress.ip_address(hostname)
-        return True
-    except ValueError:
-        return False
+def _hostname(parsed_url) -> str:
+    return (parsed_url.hostname or "").lower().strip(".")
+
+
+def _registered_domain(extracted) -> str:
+    return ".".join(part for part in [extracted.domain, extracted.suffix] if part).lower()
 
 
 def _parse_ip_hostname(hostname: str) -> ipaddress.IPv4Address | ipaddress.IPv6Address | None:
@@ -134,54 +111,6 @@ def _is_blocked_ip(ip_address: ipaddress.IPv4Address | ipaddress.IPv6Address) ->
     )
 
 
-def _hostname(parsed_url) -> str:
-    return (parsed_url.hostname or "").lower().strip(".")
-
-
-def _registered_domain(extracted) -> str:
-    return ".".join(part for part in [extracted.domain, extracted.suffix] if part).lower()
-
-
-def _entropy(value: str) -> float:
-    if not value:
-        return 0.0
-
-    counts = {character: value.count(character) for character in set(value)}
-    length = len(value)
-    return -sum((count / length) * math.log2(count / length) for count in counts.values())
-
-
-def _looks_random(label: str) -> bool:
-    compact = "".join(character for character in label.lower() if character.isalnum())
-    if len(compact) < 12:
-        return False
-
-    digit_ratio = sum(character.isdigit() for character in compact) / len(compact)
-    return _entropy(compact) > 3.35 and digit_ratio > 0.15
-
-
-def _registered_domain(extracted) -> str:
-    return ".".join(part for part in [extracted.domain, extracted.suffix] if part).lower()
-
-
-def _entropy(value: str) -> float:
-    if not value:
-        return 0.0
-
-    counts = {character: value.count(character) for character in set(value)}
-    length = len(value)
-    return -sum((count / length) * math.log2(count / length) for count in counts.values())
-
-
-def _looks_random(label: str) -> bool:
-    compact = "".join(character for character in label.lower() if character.isalnum())
-    if len(compact) < 12:
-        return False
-
-    digit_ratio = sum(character.isdigit() for character in compact) / len(compact)
-    return _entropy(compact) > 3.35 and digit_ratio > 0.15
-
-
 def _is_valid_url(url: str) -> bool:
     if validators is not None:
         return bool(validators.url(url))
@@ -195,6 +124,24 @@ def _port(parsed_url) -> int | None:
         return parsed_url.port
     except ValueError:
         return None
+
+
+def _entropy(value: str) -> float:
+    if not value:
+        return 0.0
+
+    counts = {character: value.count(character) for character in set(value)}
+    length = len(value)
+    return -sum((count / length) * math.log2(count / length) for count in counts.values())
+
+
+def _looks_random(label: str) -> bool:
+    compact = "".join(character for character in label.lower() if character.isalnum())
+    if len(compact) < 12:
+        return False
+
+    digit_ratio = sum(character.isdigit() for character in compact) / len(compact)
+    return _entropy(compact) > 3.35 and digit_ratio > 0.15
 
 
 def validate_public_audit_url(url: str) -> None:
@@ -230,6 +177,8 @@ def analyze_url(url: str) -> dict[str, object]:
     parsed = urlparse(normalized_url)
     hostname = _hostname(parsed)
     extracted = extract_domain(normalized_url)
+    registered_domain = _registered_domain(extracted)
+    lower_url = normalized_url.lower()
 
     if not _is_valid_url(normalized_url):
         score += 20
@@ -239,7 +188,7 @@ def analyze_url(url: str) -> dict[str, object]:
         score += 18
         reasons.append("The URL does not use HTTPS.")
 
-    if hostname and _is_ip_hostname(hostname):
+    if hostname and _parse_ip_hostname(hostname) is not None:
         score += 25
         reasons.append("The URL uses an IP address instead of a domain name.")
 
@@ -247,13 +196,10 @@ def analyze_url(url: str) -> dict[str, object]:
         score += 12
         reasons.append("The URL is unusually long.")
 
-    registered_domain = _registered_domain(extracted)
-    registered_domain = _registered_domain(extracted)
     if registered_domain in URL_SHORTENERS or hostname in URL_SHORTENERS:
         score += 22
         reasons.append("The URL uses a known URL shortener.")
 
-    lower_url = normalized_url.lower()
     for keyword in sorted(SUSPICIOUS_KEYWORDS):
         if keyword in lower_url:
             score += 5
@@ -267,50 +213,6 @@ def analyze_url(url: str) -> dict[str, object]:
     if len(subdomain_parts) > SUBDOMAIN_THRESHOLD:
         score += 12
         reasons.append("The URL contains an excessive number of subdomains.")
-
-    if "@" in parsed.netloc:
-        score += 25
-        reasons.append("The URL uses '@' in the authority section, which can hide the real destination.")
-
-    port = _port(parsed)
-    if port and port not in {80, 443}:
-        score += 10
-        reasons.append(f"The URL uses a non-standard port ({port}).")
-
-    path_and_query = f"{parsed.path}?{parsed.query}".strip("?")
-    if len(path_and_query) > LONG_PATH_THRESHOLD:
-        score += 8
-        reasons.append("The URL path or query string is unusually long.")
-
-    if parsed.query and parsed.query.count("&") + 1 > QUERY_PARAM_THRESHOLD:
-        score += 8
-        reasons.append("The URL contains an unusually large number of query parameters.")
-
-    if "%" in lower_url:
-        score += 7
-        reasons.append("The URL contains encoded characters that can obscure the destination.")
-
-    if "xn--" in hostname:
-        score += 18
-        reasons.append("The domain uses punycode, which can be used for lookalike domains.")
-
-    domain_label = extracted.domain.lower()
-    if domain_label.count("-") >= 2:
-        score += 8
-        reasons.append("The domain contains multiple hyphens, a common impersonation pattern.")
-
-    if sum(character.isdigit() for character in domain_label) >= 3:
-        score += 8
-        reasons.append("The domain contains several digits, which can indicate automated or lookalike naming.")
-
-    if _looks_random(domain_label):
-        score += 14
-        reasons.append("The domain label appears randomly generated.")
-
-    for brand, official_domains in BRAND_DOMAINS.items():
-        if brand in domain_label and registered_domain not in official_domains:
-            score += 24
-            reasons.append(f"The domain references '{brand}' but is not an official {brand} domain.")
 
     if "@" in parsed.netloc:
         score += 25
