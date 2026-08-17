@@ -89,6 +89,7 @@ def audit(
             scripts=request.scripts,
             password_fields=request.password_fields,
             iframes=request.iframes,
+            ads=request.ads,
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc

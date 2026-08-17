@@ -14,6 +14,7 @@ type BackendEvidence = {
 }
 
 type BackendAuditResponse = {
+  scan_id?: unknown
   risk_score?: unknown
   risk_level?: unknown
   explanation?: unknown
@@ -150,6 +151,7 @@ export async function auditWebsite(payload: AuditRequest): Promise<AuditReport> 
   const evidence = buildEvidence(data.evidence, reasons)
 
   const report: AuditReport = {
+    scanId: typeof data.scan_id === 'number' ? data.scan_id : undefined,
     score,
     verdict,
     summary:

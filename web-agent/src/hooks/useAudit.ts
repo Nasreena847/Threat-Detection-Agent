@@ -58,11 +58,11 @@ const previewAudit: AuditReport = {
 const canAudit = (website?: WebsiteInfo) =>
   Boolean(website?.url && (website.url.startsWith('http://') || website.url.startsWith('https://')))
 
-export function useAudit(website?: WebsiteInfo) {
+export function useAudit(website?: WebsiteInfo, enabled = true) {
   const queryClient = useQueryClient()
   const query = useQuery({
     queryKey: ['audit', website?.url],
-    enabled: Boolean(website),
+    enabled: Boolean(website) && enabled,
     staleTime: 60_000,
     retry: 1,
     queryFn: async () => {
@@ -81,11 +81,17 @@ export function useAudit(website?: WebsiteInfo) {
         scripts: website.scripts,
         password_fields: website.passwordFields,
         iframes: website.iframes,
+        ads: website.ads,
       })
     },
   })
 
   const refresh = async () => {
+    if (website && canAudit(website)) {
+      await query.refetch()
+      return
+    }
+
     await queryClient.invalidateQueries({ queryKey: ['audit', website?.url] })
   }
 

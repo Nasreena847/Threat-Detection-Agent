@@ -14,4 +14,5 @@ export type WebsiteInfo = {
   scripts?: number
   passwordFields?: number
   iframes?: number
+  ads?: number
 }

@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'framer-motion'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import AnalysisTimeline from '../components/AnalysisTimeline'
 import ErrorCard from '../components/ErrorCard'
 import EvidenceList from '../components/EvidenceList'
@@ -18,9 +18,11 @@ import { useCurrentTab } from '../hooks/useCurrentTab'
 export default function Popup() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [detailsExpanded, setDetailsExpanded] = useState(false)
+  const [manualScanRequested, setManualScanRequested] = useState(false)
+  const [autoScan, setAutoScan] = useState(() => localStorage.getItem('trusttab-auto-scan') !== 'false')
   const currentTab = useCurrentTab()
   const website = currentTab.data
-  const auditQuery = useAudit(website)
+  const auditQuery = useAudit(website, autoScan || manualScanRequested)
   const audit = auditQuery.audit
   const isLoading = currentTab.isLoading || auditQuery.isLoading
   const errorMessage =
@@ -31,9 +33,22 @@ export default function Popup() {
         : ''
 
   const handleRefresh = () => {
+    setManualScanRequested(true)
     void currentTab.refetch()
     void auditQuery.refresh()
   }
+
+  const handleAutoScanChange = (checked: boolean) => {
+    setAutoScan(checked)
+    localStorage.setItem('trusttab-auto-scan', String(checked))
+    if (checked) {
+      setManualScanRequested(false)
+    }
+  }
+
+  useEffect(() => {
+    setManualScanRequested(false)
+  }, [website?.url])
 
   return (
     <main className="trusttab-shell">
@@ -68,6 +83,15 @@ export default function Popup() {
                   />
                 ) : null}
                 {website ? <WebsiteCard website={website} /> : null}
+                {!autoScan && !manualScanRequested && !audit && !errorMessage ? (
+                  <motion.div
+                    animate={{ opacity: 1, y: 0 }}
+                    className="glass-card p-4 text-sm leading-6 text-neutral-300"
+                    initial={{ opacity: 0, y: 8 }}
+                  >
+                    Auto Scan is off. Press Refresh to scan this tab.
+                  </motion.div>
+                ) : null}
                 {audit ? (
                   <>
                     <SecurityScore score={audit.score} verdict={audit.verdict} />
@@ -94,7 +118,13 @@ export default function Popup() {
         />
 
         <AnimatePresence>
-          {settingsOpen ? <SettingsModal onClose={() => setSettingsOpen(false)} /> : null}
+          {settingsOpen ? (
+            <SettingsModal
+              autoScan={autoScan}
+              onAutoScanChange={handleAutoScanChange}
+              onClose={() => setSettingsOpen(false)}
+            />
+          ) : null}
         </AnimatePresence>
       </section>
     </main>

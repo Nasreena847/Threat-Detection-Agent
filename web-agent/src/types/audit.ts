@@ -21,6 +21,7 @@ export type AuditRecommendation =
   | string
 
 export type AuditReport = {
+  scanId?: number
   score: number
   verdict: AuditVerdict
   summary: string
@@ -41,4 +42,5 @@ export type AuditRequest = {
   scripts?: number
   password_fields?: number
   iframes?: number
+  ads?: number
 }

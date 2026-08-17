@@ -3,12 +3,13 @@ import { X } from 'lucide-react'
 import { useState } from 'react'
 
 type SettingsModalProps = {
+  autoScan: boolean
+  onAutoScanChange: (checked: boolean) => void
   onClose: () => void
 }
 
-export default function SettingsModal({ onClose }: SettingsModalProps) {
+export default function SettingsModal({ autoScan, onAutoScanChange, onClose }: SettingsModalProps) {
   const [notifications, setNotifications] = useState(true)
-  const [autoScan, setAutoScan] = useState(true)
   const [darkMode, setDarkMode] = useState(true)
 
   const handleDarkModeChange = (checked: boolean) => {
@@ -42,7 +43,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
         <div className="mt-4 space-y-3">
           <Toggle checked={darkMode} label="Dark Mode" onChange={handleDarkModeChange} />
           <Toggle checked={notifications} label="Notifications" onChange={setNotifications} />
-          <Toggle checked={autoScan} label="Auto Scan" onChange={setAutoScan} />
+          <Toggle checked={autoScan} label="Auto Scan" onChange={onAutoScanChange} />
         </div>
         <div className="mt-5 rounded-2xl border border-white/8 bg-black/20 p-3">
           <p className="text-sm font-medium text-white">About TrustTab</p>
