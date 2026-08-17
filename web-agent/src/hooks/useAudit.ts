@@ -1,5 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { auditWebsite } from '../services/api'
+import { getCurrentTab } from '../services/chrome'
 import type { AuditReport } from '../types/audit'
 import type { WebsiteInfo } from '../types/website'
 
@@ -75,22 +76,24 @@ export function useAudit(website?: WebsiteInfo, enabled = true) {
     refetchOnMount: 'always',
     retry: 1,
     queryFn: async () => {
-      if (!website || !canAudit(website)) {
+      const currentWebsite = await getCurrentTab().catch(() => website)
+
+      if (!currentWebsite || !canAudit(currentWebsite)) {
         return previewAudit
       }
 
       return auditWebsite({
-        url: website.url,
-        domain: website.domain,
-        title: website.title,
-        favicon: website.favicon,
-        https: website.https,
-        page_text: website.pageText || '',
-        forms: website.forms,
-        scripts: website.scripts,
-        password_fields: website.passwordFields,
-        iframes: website.iframes,
-        ads: website.ads,
+        url: currentWebsite.url,
+        domain: currentWebsite.domain,
+        title: currentWebsite.title,
+        favicon: currentWebsite.favicon,
+        https: currentWebsite.https,
+        page_text: currentWebsite.pageText || '',
+        forms: currentWebsite.forms,
+        scripts: currentWebsite.scripts,
+        password_fields: currentWebsite.passwordFields,
+        iframes: currentWebsite.iframes,
+        ads: currentWebsite.ads,
       })
     },
   })

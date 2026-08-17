@@ -28,9 +28,31 @@ const wait = (milliseconds: number) =>
     window.setTimeout(resolve, milliseconds)
   })
 
+const AD_ATTRIBUTE_PATTERN = /(^|[-_\s])(ad|ads|advert|advertisement|sponsored|sponsor|promo)([-_\s]|$)/i
+
 const countAds = () => {
   const elements = new Set<Element>()
   document.querySelectorAll(AD_SELECTOR).forEach((element) => elements.add(element))
+  document
+    .querySelectorAll('iframe, ins, aside, [id], [class], [aria-label], [data-ad], [data-ad-slot], [data-ad-client]')
+    .forEach((element) => {
+      const candidate = [
+        element.id,
+        element.className,
+        element.getAttribute('aria-label'),
+        element.getAttribute('src'),
+        element.getAttribute('data-ad'),
+        element.getAttribute('data-ad-slot'),
+        element.getAttribute('data-ad-client'),
+      ]
+        .filter(Boolean)
+        .join(' ')
+
+      if (AD_ATTRIBUTE_PATTERN.test(candidate)) {
+        elements.add(element)
+      }
+    })
+
   return elements.size
 }
 
