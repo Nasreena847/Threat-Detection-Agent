@@ -69,6 +69,8 @@ BRAND_DOMAINS = {
 EXTERNAL_SCRIPT_THRESHOLD = 10
 SCRIPT_COUNT_THRESHOLD = 18
 IFRAME_COUNT_THRESHOLD = 3
+AD_COUNT_THRESHOLD = 6
+HEAVY_AD_COUNT_THRESHOLD = 15
 MAX_SCORE = 100
 extract_domain = tldextract.TLDExtract(suffix_list_urls=(), cache_dir=None)
 
@@ -91,6 +93,21 @@ def _count_external_scripts(html: str) -> int:
     return len(re.findall(r"<script[^>]+src=[\"']?https?://", html, flags=re.IGNORECASE))
 
 
+def _count_ad_elements(html: str) -> int:
+    if not html:
+        return 0
+
+    patterns = [
+        r"<ins\b[^>]*\badsbygoogle\b",
+        r"<iframe\b[^>]+(?:doubleclick|googlesyndication|adservice|/ads?|[?&]ad_)",
+        r"<[^>]+(?:data-ad|data-ad-slot|data-ad-client)\b",
+        r"<[^>]+(?:id|class)\s*=\s*[\"'][^\"']*(?:\bad\b|ad-|advert|sponsor)[^\"']*[\"']",
+        r"aria-label\s*=\s*[\"'][^\"']*advertisement[^\"']*[\"']",
+    ]
+
+    return sum(len(re.findall(pattern, html, flags=re.IGNORECASE)) for pattern in patterns)
+
+
 def _safe_count(value: int | None, fallback: int = 0) -> int:
     return max(0, int(value if value is not None else fallback))
 
@@ -104,6 +121,7 @@ def analyze_page(
     scripts: int | None = None,
     password_fields: int | None = None,
     iframes: int | None = None,
+    ads: int | None = None,
 ) -> dict[str, object]:
     """Analyze page content supplied by the extension without fetching the site."""
 
@@ -119,6 +137,7 @@ def analyze_page(
     )
     iframe_count = _safe_count(iframes, len(re.findall(r"<iframe\b", html_lower)))
     script_count = _safe_count(scripts, len(re.findall(r"<script\b", html_lower)))
+    ad_count = _safe_count(ads, _count_ad_elements(html))
     sensitive_terms = [term for term in sorted(SENSITIVE_ACTION_TERMS) if term in combined_text]
 
     for phrase in sorted(PHISHING_PHRASES):
@@ -168,6 +187,13 @@ def analyze_page(
     if script_count > SCRIPT_COUNT_THRESHOLD:
         score += 8
         reasons.append(f"The page includes {script_count} script elements.")
+
+    if ad_count > HEAVY_AD_COUNT_THRESHOLD:
+        score += min(18, 10 + ((ad_count - HEAVY_AD_COUNT_THRESHOLD) // 4))
+        reasons.append(f"The page shows heavy advertising density with {ad_count} ad-like element(s).")
+    elif ad_count > AD_COUNT_THRESHOLD:
+        score += 6
+        reasons.append(f"The page shows elevated advertising density with {ad_count} ad-like element(s).")
 
     for brand, official_domains in BRAND_DOMAINS.items():
         if brand in combined_text and domain not in official_domains:

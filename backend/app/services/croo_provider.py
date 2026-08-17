@@ -284,6 +284,7 @@ class CrooProvider:
         scripts = self._extract_int(payload, "scripts", "script_count", "scriptCount")
         password_fields = self._extract_int(payload, "password_fields", "passwordFields", "password_count", "passwordCount")
         iframes = self._extract_int(payload, "iframes", "iframe_count", "iframeCount")
+        ads = self._extract_int(payload, "ads", "ad_count", "adCount", "advertisements", "advertisement_count")
 
         return run_audit_pipeline(
             url=url,
@@ -294,6 +295,7 @@ class CrooProvider:
             scripts=scripts,
             password_fields=password_fields,
             iframes=iframes,
+            ads=ads,
         )
 
     def _extract_payload(self, event: Any) -> dict[str, Any]:

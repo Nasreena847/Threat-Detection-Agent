@@ -1,3 +1,28 @@
+const AD_SELECTOR = [
+  'ins.adsbygoogle',
+  'iframe[src*="doubleclick"]',
+  'iframe[src*="googlesyndication"]',
+  'iframe[src*="adservice"]',
+  'iframe[src*="/ads"]',
+  '[data-ad]',
+  '[data-ad-slot]',
+  '[data-ad-client]',
+  '[id^="ad-"]',
+  '[id*="-ad-"]',
+  '[class~="ad"]',
+  '[class*=" ad-"]',
+  '[class*="-ad "]',
+  '[class*="advert"]',
+  '[class*="sponsor"]',
+  '[aria-label*="advertisement" i]',
+].join(',')
+
+const countAds = () => {
+  const elements = new Set<Element>()
+  document.querySelectorAll(AD_SELECTOR).forEach((element) => elements.add(element))
+  return elements.size
+}
+
 const getMetadata = () => {
   try {
     return {
@@ -8,6 +33,7 @@ const getMetadata = () => {
       scripts: document.scripts?.length ?? 0,
       passwordFields: document.querySelectorAll('input[type="password"]')?.length ?? 0,
       iframes: document.querySelectorAll('iframe')?.length ?? 0,
+      ads: countAds(),
     }
   } catch (error) {
     console.error('Error collecting metadata:', error)
@@ -19,6 +45,7 @@ const getMetadata = () => {
       scripts: 0,
       passwordFields: 0,
       iframes: 0,
+      ads: 0,
     }
   }
 }

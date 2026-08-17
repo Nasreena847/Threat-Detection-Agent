@@ -21,6 +21,7 @@ const createWebsiteInfo = (
   scripts?: number,
   passwordFields?: number,
   iframes?: number,
+  ads?: number,
 ): WebsiteInfo => {
   const protocol = url.startsWith('https:') ? 'https:' : url.startsWith('http:') ? 'http:' : 'browser:'
   const now = new Date().toISOString()
@@ -41,6 +42,7 @@ const createWebsiteInfo = (
     scripts,
     passwordFields,
     iframes,
+    ads,
   }
 }
 
@@ -73,6 +75,7 @@ export async function getCurrentTab(): Promise<WebsiteInfo> {
       scripts?: number
       passwordFields?: number
       iframes?: number
+      ads?: number
       error?: string
     }
 
@@ -90,6 +93,7 @@ export async function getCurrentTab(): Promise<WebsiteInfo> {
       metadata.scripts,
       metadata.passwordFields,
       metadata.iframes,
+      metadata.ads,
     )
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)

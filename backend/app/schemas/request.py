@@ -15,6 +15,7 @@ class AuditRequest(BaseModel):
     scripts: int | None = Field(default=None, ge=0, description="Number of scripts detected on the page.")
     password_fields: int | None = Field(default=None, ge=0, description="Number of password fields detected on the page.")
     iframes: int | None = Field(default=None, ge=0, description="Number of iframes detected on the page.")
+    ads: int | None = Field(default=None, ge=0, description="Number of advertisement-like elements detected on the page.")
 
 
 class CrooInvokeRequest(BaseModel):

@@ -15,6 +15,7 @@ def run_audit_pipeline(
     scripts: int | None = None,
     password_fields: int | None = None,
     iframes: int | None = None,
+    ads: int | None = None,
 ) -> dict[str, object]:
     """Run the shared deterministic audit pipeline used by both the audit route and CROO integration."""
 
@@ -29,6 +30,7 @@ def run_audit_pipeline(
         scripts=scripts,
         password_fields=password_fields,
         iframes=iframes,
+        ads=ads,
     )
     reputation_analysis = reputation_service.analyze(url)
     ml_analysis = ml_classifier_service.analyze(url)

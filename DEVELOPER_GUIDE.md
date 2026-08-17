@@ -196,6 +196,7 @@ Collected fields:
 - number of script tags
 - number of password fields
 - number of iframes
+- number of advertisement-like elements
 
 This design avoids server-side crawling and reduces SSRF risk.
 
@@ -291,7 +292,7 @@ Implemented in:
 
 Important function:
 
-- `analyze_page(url, title, page_text, html, forms, scripts, password_fields, iframes) -> dict[str, object]`
+- `analyze_page(url, title, page_text, html, forms, scripts, password_fields, iframes, ads) -> dict[str, object]`
 
 Signals:
 
@@ -303,6 +304,7 @@ Signals:
 - forms combined with credential/payment language
 - hidden iframes
 - many iframes
+- elevated or heavy ad density
 - suspicious JavaScript patterns
 - many external scripts
 - brand references on non-official domains
@@ -579,6 +581,7 @@ Pydantic request models:
 - `scripts`
 - `password_fields`
 - `iframes`
+- `ads`
 
 ### `backend/app/schemas/response.py`
 
@@ -620,6 +623,7 @@ run_audit_pipeline(
     scripts=None,
     password_fields=None,
     iframes=None,
+    ads=None,
 )
 ```
 
