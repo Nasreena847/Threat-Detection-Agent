@@ -4,18 +4,29 @@ const AD_SELECTOR = [
   'iframe[src*="googlesyndication"]',
   'iframe[src*="adservice"]',
   'iframe[src*="/ads"]',
+  'iframe[id*="ad"]',
+  'iframe[class*="ad"]',
   '[data-ad]',
   '[data-ad-slot]',
   '[data-ad-client]',
+  '[data-google-query-id]',
   '[id^="ad-"]',
   '[id*="-ad-"]',
+  '[id*="ads"]',
   '[class~="ad"]',
   '[class*=" ad-"]',
   '[class*="-ad "]',
+  '[class*="ads"]',
   '[class*="advert"]',
   '[class*="sponsor"]',
+  '[class*="promo"]',
   '[aria-label*="advertisement" i]',
 ].join(',')
+
+const wait = (milliseconds: number) =>
+  new Promise((resolve) => {
+    window.setTimeout(resolve, milliseconds)
+  })
 
 const countAds = () => {
   const elements = new Set<Element>()
@@ -23,8 +34,10 @@ const countAds = () => {
   return elements.size
 }
 
-const getMetadata = () => {
+const getMetadata = async () => {
   try {
+    await wait(document.readyState === 'complete' ? 500 : 900)
+
     return {
       title: document.title || '',
       url: location.href || '',
@@ -58,7 +71,10 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       'type' in message &&
       message.type === 'TRUSTTAB_PAGE_METADATA'
     ) {
-      sendResponse(getMetadata())
+      void getMetadata().then(sendResponse).catch((error) => {
+        console.error('Error collecting metadata:', error)
+        sendResponse({ error: String(error) })
+      })
       return true
     }
   } catch (error) {

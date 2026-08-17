@@ -5,7 +5,8 @@ export function useCurrentTab() {
   return useQuery({
     queryKey: ['current-tab'],
     queryFn: getCurrentTab,
-    staleTime: 10_000,
+    staleTime: 0,
+    refetchOnMount: 'always',
     retry: false,
   })
 }

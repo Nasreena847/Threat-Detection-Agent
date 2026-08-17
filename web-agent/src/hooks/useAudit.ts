@@ -61,9 +61,18 @@ const canAudit = (website?: WebsiteInfo) =>
 export function useAudit(website?: WebsiteInfo, enabled = true) {
   const queryClient = useQueryClient()
   const query = useQuery({
-    queryKey: ['audit', website?.url],
+    queryKey: [
+      'audit',
+      website?.url,
+      website?.forms,
+      website?.scripts,
+      website?.passwordFields,
+      website?.iframes,
+      website?.ads,
+    ],
     enabled: Boolean(website) && enabled,
-    staleTime: 60_000,
+    staleTime: 0,
+    refetchOnMount: 'always',
     retry: 1,
     queryFn: async () => {
       if (!website || !canAudit(website)) {
@@ -92,7 +101,7 @@ export function useAudit(website?: WebsiteInfo, enabled = true) {
       return
     }
 
-    await queryClient.invalidateQueries({ queryKey: ['audit', website?.url] })
+    await queryClient.invalidateQueries({ queryKey: ['audit'] })
   }
 
   return {

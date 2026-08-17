@@ -58,16 +58,28 @@ const isEvidenceIcon = (value: unknown): value is NonNullable<AuditEvidence['ico
 
 const normalizeEvidenceItem = (item: unknown, index: number): AuditEvidence | null => {
   if (typeof item === 'string') {
+    const normalized = item.toLowerCase()
     const isPositive =
-      item.toLowerCase().includes('enabled') ||
-      item.toLowerCase().includes('valid') ||
-      item.toLowerCase().includes('secure')
+      normalized.includes('enabled') ||
+      normalized.includes('valid') ||
+      normalized.includes('secure') ||
+      normalized.includes('no obvious')
+    const isAdWarning =
+      normalized.includes('too many ads') ||
+      normalized.includes('advertising density') ||
+      normalized.includes('ad density')
+    const isHighAdWarning = normalized.includes('too many ads') || normalized.includes('malware') || normalized.includes('virus')
 
     return {
       id: `evidence-${index}`,
-      title: item.replace(/^[✔⚠]\s*/, ''),
-      description: isPositive ? 'No issue detected for this signal.' : 'Review this signal before proceeding.',
-      status: isPositive ? 'positive' : 'warning',
+      title: isAdWarning ? 'Too Many Ads Detected' : item.replace(/^[✔⚠]\s*/, ''),
+      description: isAdWarning
+        ? item
+        : isPositive
+          ? 'No issue detected for this signal.'
+          : 'Review this signal before proceeding.',
+      status: isAdWarning ? (isHighAdWarning ? 'negative' : 'warning') : isPositive ? 'positive' : 'warning',
+      icon: isAdWarning ? 'alert' : undefined,
     }
   }
 
@@ -275,4 +287,3 @@ export async function auditWebsite(payload: AuditRequest): Promise<AuditReport> 
   writeAuditHistory(payload, report)
   return report
 }
-

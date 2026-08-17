@@ -1,6 +1,7 @@
 import { AnimatePresence, motion } from 'framer-motion'
 import { useQuery } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
+import AdWarningCard from '../components/AdWarningCard'
 import AnalysisTimeline from '../components/AnalysisTimeline'
 import DetailsDropdown from '../components/DetailsDropdown'
 import ErrorCard from '../components/ErrorCard'
@@ -27,6 +28,7 @@ export default function Popup() {
   const website = currentTab.data
   const auditQuery = useAudit(website, autoScan || manualScanRequested)
   const audit = auditQuery.audit
+  const adWarning = audit?.evidence.find((item) => item.title === 'Too Many Ads Detected')
   const historyQuery = useQuery({
     queryKey: ['audit-history', audit?.scanId, audit?.score, audit?.summary],
     queryFn: () => fetchAuditHistory(6),
@@ -107,6 +109,7 @@ export default function Popup() {
                   <>
                     <SecurityScore score={audit.score} verdict={audit.verdict} />
                     <RiskMeter score={audit.score} />
+                    <AdWarningCard evidence={adWarning} />
                     <ScanHistory history={history} limit={5} />
                     <SummaryCard summary={audit.summary} />
                     <DetailsDropdown
@@ -146,4 +149,3 @@ export default function Popup() {
     </main>
   )
 }
-

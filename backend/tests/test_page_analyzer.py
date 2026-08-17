@@ -24,7 +24,9 @@ class PageAnalyzerTests(unittest.TestCase):
         )
 
         self.assertGreater(ad_heavy["score"], baseline["score"])
-        self.assertTrue(any("advertising density" in reason for reason in ad_heavy["reasons"]))
+        self.assertGreaterEqual(ad_heavy["score"], 50)
+        self.assertTrue(any("Too many ads detected" in reason for reason in ad_heavy["reasons"]))
+        self.assertTrue(any("scam, malware, or virus-like redirects" in reason for reason in ad_heavy["reasons"]))
 
 
 if __name__ == "__main__":

@@ -69,8 +69,8 @@ BRAND_DOMAINS = {
 EXTERNAL_SCRIPT_THRESHOLD = 10
 SCRIPT_COUNT_THRESHOLD = 18
 IFRAME_COUNT_THRESHOLD = 3
-AD_COUNT_THRESHOLD = 6
-HEAVY_AD_COUNT_THRESHOLD = 15
+AD_COUNT_THRESHOLD = 3
+HEAVY_AD_COUNT_THRESHOLD = 8
 MAX_SCORE = 100
 extract_domain = tldextract.TLDExtract(suffix_list_urls=(), cache_dir=None)
 
@@ -101,7 +101,7 @@ def _count_ad_elements(html: str) -> int:
         r"<ins\b[^>]*\badsbygoogle\b",
         r"<iframe\b[^>]+(?:doubleclick|googlesyndication|adservice|/ads?|[?&]ad_)",
         r"<[^>]+(?:data-ad|data-ad-slot|data-ad-client)\b",
-        r"<[^>]+(?:id|class)\s*=\s*[\"'][^\"']*(?:\bad\b|ad-|advert|sponsor)[^\"']*[\"']",
+        r"<[^>]+(?:id|class)\s*=\s*[\"'][^\"']*(?:\bad\b|ad-|ads-|advert|sponsor|promo)[^\"']*[\"']",
         r"aria-label\s*=\s*[\"'][^\"']*advertisement[^\"']*[\"']",
     ]
 
@@ -189,11 +189,15 @@ def analyze_page(
         reasons.append(f"The page includes {script_count} script elements.")
 
     if ad_count > HEAVY_AD_COUNT_THRESHOLD:
-        score += min(18, 10 + ((ad_count - HEAVY_AD_COUNT_THRESHOLD) // 4))
-        reasons.append(f"The page shows heavy advertising density with {ad_count} ad-like element(s).")
+        score += min(58, 44 + ((ad_count - HEAVY_AD_COUNT_THRESHOLD) * 2))
+        reasons.append(
+            f"Too many ads detected: {ad_count} ad-like element(s). High ad density can be unreliable and may lead to scam, malware, or virus-like redirects."
+        )
     elif ad_count > AD_COUNT_THRESHOLD:
-        score += 6
-        reasons.append(f"The page shows elevated advertising density with {ad_count} ad-like element(s).")
+        score += 18
+        reasons.append(
+            f"Elevated ad density detected: {ad_count} ad-like element(s). Ads from unknown networks can be unreliable and should be treated with caution."
+        )
 
     for brand, official_domains in BRAND_DOMAINS.items():
         if brand in combined_text and domain not in official_domains:
