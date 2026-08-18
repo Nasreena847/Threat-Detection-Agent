@@ -35,6 +35,7 @@ type BackendAuditResponse = {
   summary?: unknown
   website?: unknown
   components?: unknown
+  ad_risk?: unknown
   threat_intel?: unknown
   ml?: unknown
   explanation_source?: unknown
@@ -67,7 +68,8 @@ const normalizeEvidenceItem = (item: unknown, index: number): AuditEvidence | nu
     const isAdWarning =
       normalized.includes('too many ads') ||
       normalized.includes('advertising density') ||
-      normalized.includes('ad density')
+      normalized.includes('ad density') ||
+      normalized.includes('ad risk model')
     const isHighAdWarning = normalized.includes('too many ads') || normalized.includes('malware') || normalized.includes('virus')
 
     return {
@@ -132,6 +134,8 @@ const buildEvidence = (value: unknown, reasons: string[]): AuditEvidence[] => {
 }
 
 const readCachedAudit = (domain: string): AuditReport | null => {
+  if (typeof window === 'undefined') return null
+
   const raw = window.localStorage.getItem(`trusttab:audit:${CACHE_VERSION}:${domain}`)
   if (!raw) return null
 
@@ -157,6 +161,8 @@ export const readAuditHistory = (): AuditHistoryEntry[] => {
 }
 
 const writeCachedAudit = (domain: string, report: AuditReport) => {
+  if (typeof window === 'undefined') return
+
   window.localStorage.setItem(`trusttab:audit:${CACHE_VERSION}:${domain}`, JSON.stringify(report))
 }
 
@@ -278,6 +284,7 @@ export async function auditWebsite(payload: AuditRequest): Promise<AuditReport> 
     evidence,
     website: data.website && typeof data.website === 'object' ? data.website : undefined,
     components: isRecord(data.components) ? data.components : undefined,
+    adRisk: isRecord(data.ad_risk) ? data.ad_risk : undefined,
     threatIntel: isRecord(data.threat_intel) ? data.threat_intel : undefined,
     ml: isRecord(data.ml) ? data.ml : undefined,
     explanationSource: isRecord(data.explanation_source) ? data.explanation_source : undefined,

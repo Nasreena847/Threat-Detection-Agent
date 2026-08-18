@@ -112,6 +112,31 @@ def _safe_count(value: int | None, fallback: int = 0) -> int:
     return max(0, int(value if value is not None else fallback))
 
 
+def _ad_risk_model(ad_count: int, iframe_count: int, script_count: int) -> tuple[int, str]:
+    """Estimate ad danger from observable page signals supplied by the extension."""
+
+    if ad_count <= 0:
+        return 0, ""
+
+    score = min(80, 8 + (ad_count * 7))
+    if iframe_count >= 3:
+        score += 8
+    if script_count >= 18:
+        score += 8
+
+    score = _clamp_score(score)
+    if score >= 60:
+        severity = "critical"
+    elif score >= 50:
+        severity = "high"
+    elif score >= 30:
+        severity = "elevated"
+    else:
+        severity = "low"
+
+    return score, severity
+
+
 def analyze_page(
     url: str,
     title: str,
@@ -138,6 +163,7 @@ def analyze_page(
     iframe_count = _safe_count(iframes, len(re.findall(r"<iframe\b", html_lower)))
     script_count = _safe_count(scripts, len(re.findall(r"<script\b", html_lower)))
     ad_count = _safe_count(ads, _count_ad_elements(html))
+    ad_risk_score, ad_risk_severity = _ad_risk_model(ad_count, iframe_count, script_count)
     sensitive_terms = [term for term in sorted(SENSITIVE_ACTION_TERMS) if term in combined_text]
 
     for phrase in sorted(PHISHING_PHRASES):
@@ -189,14 +215,14 @@ def analyze_page(
         reasons.append(f"The page includes {script_count} script elements.")
 
     if ad_count >= HEAVY_AD_COUNT_THRESHOLD:
-        score += min(72, 60 + ((ad_count - HEAVY_AD_COUNT_THRESHOLD) * 2))
+        score += ad_risk_score
         reasons.append(
-            f"Too many ads detected: {ad_count} ad-like element(s). High ad density can be unreliable and may lead to scam, malware, or virus-like redirects."
+            f"Too many ads detected: {ad_count} ad-like element(s). The ad risk model rated this as {ad_risk_severity} risk because heavy ad density can be unreliable and may lead to scam, malware, or virus-like redirects."
         )
     elif ad_count >= AD_COUNT_THRESHOLD:
-        score += min(36, 22 + ((ad_count - AD_COUNT_THRESHOLD) * 4))
+        score += ad_risk_score
         reasons.append(
-            f"Elevated ad density detected: {ad_count} ad-like element(s). Ads from unknown networks can be unreliable and should be treated with caution."
+            f"Elevated ad density detected: {ad_count} ad-like element(s). The ad risk model rated this as {ad_risk_severity} risk because ads from unknown networks can be unreliable."
         )
 
     for brand, official_domains in BRAND_DOMAINS.items():
@@ -215,4 +241,12 @@ def analyze_page(
     if not reasons:
         reasons.append("No obvious page-level phishing indicators were detected.")
 
-    return {"score": _clamp_score(score), "reasons": reasons}
+    return {
+        "score": _clamp_score(score),
+        "reasons": reasons,
+        "ad_risk": {
+            "count": ad_count,
+            "score": ad_risk_score,
+            "severity": ad_risk_severity or "none",
+        },
+    }

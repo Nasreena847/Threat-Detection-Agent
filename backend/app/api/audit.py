@@ -112,6 +112,7 @@ def audit(
         explanation=str(result["explanation"]),
         explanation_source=result["explanation_source"] if isinstance(result.get("explanation_source"), dict) else {},
         evidence=[str(reason) for reason in result["reasons"]],
+        ad_risk=result["ad_risk"] if isinstance(result.get("ad_risk"), dict) else {},
         threat_intel=result["threat_intel"] if isinstance(result.get("threat_intel"), dict) else {},
         ml=result["ml"] if isinstance(result.get("ml"), dict) else {},
         croo=CrooAuditResponse(agent_used=False, response=None),

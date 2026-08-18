@@ -30,6 +30,7 @@ export type AuditReport = {
   evidence: AuditEvidence[]
   website?: Partial<WebsiteInfo>
   components?: Record<string, unknown>
+  adRisk?: Record<string, unknown>
   threatIntel?: Record<string, unknown>
   ml?: Record<string, unknown>
   explanationSource?: Record<string, unknown>

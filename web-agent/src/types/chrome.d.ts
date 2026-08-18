@@ -5,6 +5,10 @@ type ChromeTab = {
   favIconUrl?: string
 }
 
+type ChromeTabChangeInfo = {
+  status?: 'loading' | 'complete'
+}
+
 type ChromeQueryInfo = {
   active?: boolean
   currentWindow?: boolean
@@ -32,6 +36,7 @@ declare const chrome: {
   }
   storage: {
     local: {
+      get(keys?: string | string[] | Record<string, unknown> | null): Promise<Record<string, unknown>>
       set(items: Record<string, unknown>): Promise<void>
     }
   }
@@ -39,5 +44,8 @@ declare const chrome: {
     query(queryInfo: ChromeQueryInfo): Promise<ChromeTab[]>
     sendMessage(tabId: number, message: unknown): Promise<unknown>
     create(createProperties: { url: string }): Promise<ChromeTab>
+    onUpdated: {
+      addListener(callback: (tabId: number, changeInfo: ChromeTabChangeInfo, tab: ChromeTab) => void): void
+    }
   }
 }

@@ -16,6 +16,11 @@ def _has_trusted_reputation(reputation_analysis: AnalysisResult) -> bool:
     )
 
 
+def _ad_risk(page_analysis: AnalysisResult) -> dict[str, object]:
+    ad_risk = page_analysis.get("ad_risk")
+    return ad_risk if isinstance(ad_risk, dict) else {"count": 0, "score": 0, "severity": "none"}
+
+
 def _risk_level(score: int) -> str:
     if score <= 25:
         return "Safe"
@@ -43,6 +48,8 @@ def calculate_risk(
     url_score = _score(url_analysis)
     page_score = _score(page_analysis)
     reputation_score = _score(reputation_analysis)
+    ad_risk = _ad_risk(page_analysis)
+    ad_risk_score = int(ad_risk.get("score") or 0)
     trusted_reputation = _has_trusted_reputation(reputation_analysis)
     ml_available = bool((ml_analysis or {}).get("available"))
     ml_score = _score(ml_analysis or {}) if ml_available else 0
@@ -83,6 +90,15 @@ def calculate_risk(
         elif page_score < 70:
             weighted_score = min(weighted_score, 38)
 
+    if ad_risk_score >= 60:
+        weighted_score = max(weighted_score, round(ad_risk_score * 0.9))
+    elif ad_risk_score >= 50:
+        weighted_score = max(weighted_score, 42)
+    elif ad_risk_score >= 30:
+        weighted_score = max(weighted_score, 28)
+    elif ad_risk_score > 0:
+        weighted_score = max(weighted_score, 16)
+
     risk_score = max(0, min(weighted_score, 100))
     ml_reasons = _reasons(ml_analysis or {}) if ml_available else []
     if ml_available and ml_score >= 50 and not ml_has_rule_support:
@@ -106,7 +122,9 @@ def calculate_risk(
             "page": page_score,
             "reputation": reputation_score,
             "ml": ml_score,
+            "ads": ad_risk_score,
         },
+        "ad_risk": ad_risk,
         "threat_intel": {
             "provider": reputation_analysis.get("provider"),
             "dns": reputation_analysis.get("dns"),

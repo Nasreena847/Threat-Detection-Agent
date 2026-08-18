@@ -54,10 +54,21 @@ export default function Popup() {
   const handleAutoScanChange = (checked: boolean) => {
     setAutoScan(checked)
     localStorage.setItem('trusttab-auto-scan', String(checked))
+    void chrome.storage.local.set({ 'trusttab-auto-scan': checked })
     if (checked) {
       setManualScanRequested(false)
     }
   }
+
+  useEffect(() => {
+    void chrome.storage.local.get('trusttab-auto-scan').then((stored) => {
+      const value = stored['trusttab-auto-scan']
+      if (typeof value === 'boolean') {
+        setAutoScan(value)
+        localStorage.setItem('trusttab-auto-scan', String(value))
+      }
+    })
+  }, [])
 
   useEffect(() => {
     setManualScanRequested(false)
@@ -109,7 +120,7 @@ export default function Popup() {
                   <>
                     <SecurityScore score={audit.score} verdict={audit.verdict} />
                     <RiskMeter score={audit.score} />
-                    <AdWarningCard evidence={adWarning} />
+                    <AdWarningCard adRisk={audit.adRisk} evidence={adWarning} />
                     <ScanHistory history={history} limit={5} />
                     <SummaryCard summary={audit.summary} />
                     <DetailsDropdown

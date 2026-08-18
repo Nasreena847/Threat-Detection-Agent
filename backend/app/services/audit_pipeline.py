@@ -47,6 +47,7 @@ def run_audit_pipeline(
         "explanation": str(explanation_result["explanation"]),
         "explanation_source": explanation_result,
         "components": risk_assessment.get("components", {}),
+        "ad_risk": risk_assessment.get("ad_risk", {}),
         "threat_intel": risk_assessment.get("threat_intel", {}),
         "ml": risk_assessment.get("ml", {}),
     }
